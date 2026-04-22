@@ -282,6 +282,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
   content: attr(data-placeholder);
   color: var(--muted);
 }
+#cuerpoPrincipalEditor {
+  /* Máximo aproximado de 10 líneas visibles; luego scroll */
+  max-height: calc(1.55em * 10 + 16px);
+  overflow-y: auto;
+}
 </style>
 </head>
 <body>
@@ -1840,7 +1845,13 @@ function syncTiposDesdeBiblioteca() {
   for (let i = TIPOS.length - 1; i >= 0; i--) {
     if (TIPOS[i].esPlantillaGuardada) TIPOS.splice(i, 1);
   }
-  state.bibliotecaEscritos.forEach(item => TIPOS.push(buildTipoDesdeBiblioteca(item)));
+  const seenIds = new Set(TIPOS.map(t => t.id));
+  state.bibliotecaEscritos.forEach(item => {
+    if (!item || !item.id) return;
+    if (seenIds.has(item.id)) return;
+    TIPOS.push(buildTipoDesdeBiblioteca(item));
+    seenIds.add(item.id);
+  });
   if (!TIPOS.some(t => t.id === state.tipoEscritoId)) {
     state.tipoEscritoId = TIPOS.some(t => t.id === "generico") ? "generico" : TIPOS[0].id;
   }
@@ -1924,7 +1935,14 @@ function renderAll() {
 function renderTipoSelector() {
   const sel = document.getElementById("tipoEscrito");
   sel.innerHTML = "";
-  for (const t of TIPOS) {
+  const seenIds = new Set();
+  const tiposUnicos = TIPOS.filter(t => {
+    if (!t || !t.id) return false;
+    if (seenIds.has(t.id)) return false;
+    seenIds.add(t.id);
+    return true;
+  });
+  for (const t of tiposUnicos) {
     const opt = document.createElement("option");
     opt.value = t.id; opt.textContent = t.nombre;
     sel.appendChild(opt);
