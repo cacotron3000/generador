@@ -335,6 +335,7 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
         <option value="mero-tramite">1. Mero trámite</option>
         <option value="con-patrocinio-poder">2. Con patrocinio y poder</option>
         <option value="con-mandato-judicial">3. Con mandato judicial</option>
+        <option value="con-patrocinio-poder-causa-iniciada">4. Con patrocinio y poder (causa ya iniciada)</option>
       </select>
     </div>
     <div id="comparecenciaExtras" style="display:none;">
@@ -841,6 +842,21 @@ function buildDocxComparecenciaRuns() {
     const nombres = d.act.length ? joinNames(d.act.map(p => p.nombre.trim().toUpperCase())) : "[ABOGADO/A O ABOGADOS/AS]";
     runs.push({ text: nombres, bold: true });
     runs.push({ text: `, abogado, en representación de ${cliente}, según se acreditará, todos domiciliados para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:` });
+    return runs;
+  }
+  if (modo === "con-patrocinio-poder-causa-iniciada") {
+    const cliente = applyVariablesToText((state.clienteNombre || "").trim() || "[CLIENTE]", "comparecencia");
+    const profesion = applyVariablesToText((state.clienteProfesion || "").trim() || "[PROFESIÓN/OFICIO]", "comparecencia");
+    const rut = applyVariablesToText((state.clienteRut || "").trim() || "[NÚMERO DE RUT]", "comparecencia");
+    const domicilio = applyVariablesToText((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]", "comparecencia");
+    const materia = applyVariablesToText((state.materia || "").trim() || "[MATERIA]", "comparecencia");
+    const caratula = applyVariablesToText(((state.caratula || "").trim() || "[CARÁTULA]").toUpperCase(), "comparecencia");
+    const tipo = state.tipoCausa;
+    const numero = applyVariablesToText((state.numeroCausa || "").trim() || "[NÚMERO]", "comparecencia");
+    runs.push({ text: cliente, bold: true });
+    runs.push({ text: `, ${profesion}, RUT ${rut}, domiciliado para estos efectos en ${domicilio}, en autos sobre ${materia}, caratulada ` });
+    runs.push({ text: "\u201C" + caratula + "\u201D", bold: true });
+    runs.push({ text: `, Causa ${tipo} ${numero}, a S.S., respetuosamente, digo:` });
     return runs;
   }
 
@@ -2436,6 +2452,17 @@ function buildComparecenciaHtml() {
     const cliente = escapeHtml((state.clienteNombre || "").trim() || "[CLIENTE]");
     const domicilio = escapeHtml((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]");
     return applyVariablesToHtml(`<span class="bold">${d.nombresHtml || "[ABOGADO/A O ABOGADOS/AS]"}</span>, abogado, en representación de ${cliente}, según se acreditará, todos domiciliados para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:`, "comparecencia");
+  }
+  if (modo === "con-patrocinio-poder-causa-iniciada") {
+    const cliente = escapeHtml((state.clienteNombre || "").trim() || "[CLIENTE]");
+    const profesion = escapeHtml((state.clienteProfesion || "").trim() || "[PROFESIÓN/OFICIO]");
+    const rut = escapeHtml((state.clienteRut || "").trim() || "[NÚMERO DE RUT]");
+    const domicilio = escapeHtml((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]");
+    const materia  = escapeHtml((state.materia||"").trim() || "[MATERIA]");
+    const caratula = escapeHtml(((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase());
+    const tipo     = escapeHtml(state.tipoCausa);
+    const numero   = escapeHtml((state.numeroCausa||"").trim() || "[NÚMERO]");
+    return applyVariablesToHtml(`<span class="bold">${cliente}</span>, ${profesion}, RUT ${rut}, domiciliado para estos efectos en ${domicilio}, en autos sobre ${materia}, caratulada <span class="bold">&ldquo;${caratula}&rdquo;</span>, Causa <span class="bold">${tipo}</span> <span class="bold">${numero}</span>, a S.S., respetuosamente, digo:`, "comparecencia");
   }
   const materia  = escapeHtml((state.materia||"").trim() || "[MATERIA]");
   const caratula = escapeHtml(((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase());
