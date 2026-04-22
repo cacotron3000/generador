@@ -328,10 +328,10 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       </select>
     </div>
     <div class="field"><label>Tribunal</label><input type="text" id="tribunal" placeholder="Ej.: PRIMER JUZGADO DE LETRAS DEL TRABAJO DE SANTIAGO"></div>
-    <div class="field"><label>Materia</label><input type="text" id="materia" placeholder="Ej.: despido injustificado"></div>
-    <div class="field"><label>Carátula <span class="hint">(se mostrará siempre en mayúsculas)</span></label><input type="text" id="caratula" placeholder="Ej.: Pérez con Empresa X S.A."></div>
-    <div class="field"><label>Parte que presenta</label><input type="text" id="parte" placeholder="demandada / demandante / querellada"></div>
-    <div class="field">
+    <div class="field" id="fieldMateria"><label>Materia</label><input type="text" id="materia" placeholder="Ej.: despido injustificado"></div>
+    <div class="field" id="fieldCaratula"><label>Carátula <span class="hint">(se mostrará siempre en mayúsculas)</span></label><input type="text" id="caratula" placeholder="Ej.: Pérez con Empresa X S.A."></div>
+    <div class="field" id="fieldParte"><label>Parte que presenta</label><input type="text" id="parte" placeholder="demandada / demandante / querellada"></div>
+    <div class="field" id="fieldRitRol">
       <label>RIT / ROL y número</label>
       <div class="row-2">
         <select id="tipoCausa"><option value="RIT">RIT</option><option value="ROL">ROL</option></select>
@@ -345,9 +345,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       <div class="field"><label>Domicilio para estos efectos</label><input type="text" id="comparecenciaDomicilio" placeholder="Ej.: Av. Apoquindo 1234, oficina 501, Las Condes"></div>
     </div>
 
-    <h2 class="spaced">Abogado/a que comparece</h2>
-    <div id="delegantesList"></div>
-    <button type="button" class="add-btn" id="addDelegante">+ Agregar firmante</button>
+    <div id="sectionDeleganteComparece">
+      <h2 class="spaced">Abogado/a que comparece</h2>
+      <div id="delegantesList"></div>
+      <button type="button" class="add-btn" id="addDelegante">+ Agregar firmante</button>
+    </div>
 
     <div class="actions">
       <label style="margin:0;">Plantilla de causa</label>
@@ -2169,13 +2171,15 @@ function renderEncabezadoFields() {
 function applyComparecenciaModeUI() {
   const modo = state.modalidadComparecencia || "mero-tramite";
   const usaPlantilla = (modo === "mero-tramite");
-  const desactivaDatosCausa = (modo === "con-patrocinio-poder" || modo === "con-mandato-judicial");
+  const ocultaDatosCausa = (modo === "con-patrocinio-poder" || modo === "con-mandato-judicial");
   const extras = document.getElementById("comparecenciaExtras");
   if (extras) extras.style.display = usaPlantilla ? "none" : "";
-  ["materia","caratula","parte"].forEach(id => {
+  ["fieldMateria","fieldCaratula","fieldParte","fieldRitRol"].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.disabled = desactivaDatosCausa;
+    if (el) el.style.display = ocultaDatosCausa ? "none" : "";
   });
+  const bloqueDelegante = document.getElementById("sectionDeleganteComparece");
+  if (bloqueDelegante) bloqueDelegante.style.display = ocultaDatosCausa ? "none" : "";
   ["plantillaSelector","btnGuardarPlantilla","btnDuplicarPlantilla","btnEliminarPlantilla"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = !usaPlantilla;
