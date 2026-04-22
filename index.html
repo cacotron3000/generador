@@ -232,6 +232,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 .page p.center { text-align: center; }
 .page p.indent { text-indent: 36pt; }
 .page p.suma { text-indent: 0; }
+.page, .page * { max-width: 100%; }
+.page p, .page div, .page span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .page .bold { font-weight: bold; }
 .page .uline { text-decoration: underline; }
 .page .otrosi-title { font-weight: bold; }
