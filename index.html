@@ -377,7 +377,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <h2 class="spaced" id="camposVarsTitle" style="display:none;">Campos variables detectados</h2>
     <div id="camposVariablesWrap"></div>
 
-    <h2 class="spaced">Biblioteca de párrafos</h2>
+    <h2 class="spaced">Biblioteca de párrafos
+      <span>
+        <button type="button" class="btn small" id="openBibliotecaParrafos">Biblioteca</button>
+      </span>
+    </h2>
     <div class="field">
       <label>Plantillas de párrafo guardadas</label>
       <select id="parrafoSelector"></select>
@@ -469,6 +473,18 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       Las plantillas guardadas aquí se agregan al selector de tipo de escrito.
     </p>
     <div id="bibliotecaEscritosList"></div>
+  </div>
+</div>
+
+<!-- Modal biblioteca de párrafos -->
+<div class="modal-backdrop" id="modalParrafosBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalParrafosTitle">
+    <button class="close" id="modalParrafosClose" title="Cerrar">×</button>
+    <h3 id="modalParrafosTitle">Biblioteca de párrafos</h3>
+    <p style="color:var(--muted); font-size:13px; margin-top:0;">
+      Vista previa de párrafos guardados para reutilizar en el cuerpo del escrito.
+    </p>
+    <div id="bibliotecaParrafosList"></div>
   </div>
 </div>
 
@@ -1582,6 +1598,19 @@ function dedupeBibliotecas() {
     return true;
   });
 }
+function dedupeParrafos() {
+  const seenIds = new Set();
+  const seenContent = new Set();
+  state.bibliotecaParrafos = state.bibliotecaParrafos.filter(p => {
+    if (!p || !p.id) return false;
+    if (seenIds.has(p.id)) return false;
+    const key = normalizeLibText(p.nombre) + "||" + normalizeLibText(p.contenido);
+    if (seenContent.has(key)) return false;
+    seenIds.add(p.id);
+    seenContent.add(key);
+    return true;
+  });
+}
 function applyFormatToEditor(editor, cmd) {
   if (!editor) return;
   editor.focus();
@@ -2249,6 +2278,8 @@ function ensureCamposVariablesRendered() {
 }
 
 function renderParrafosBiblioteca() {
+  dedupeParrafos();
+  saveBibliotecaParrafos();
   const sel = document.getElementById("parrafoSelector");
   if (!sel) return;
   sel.innerHTML = "";
@@ -2593,6 +2624,24 @@ function bindCamposVariablesEvents() {
   });
 }
 
+function insertParrafoEnCuerpo(p) {
+  if (!p) return false;
+  const tipo = tipoById(state.tipoEscritoId);
+  if (tipo.estructurado) {
+    showStatus("Este tipo de escrito usa cuerpo estructurado; cambie a un tipo editable para insertar párrafos.", "err");
+    return false;
+  }
+  const add = `<div>${p.contenido}</div>`;
+  state.cuerpoPrincipal = (state.cuerpoPrincipal || "").trim()
+    ? (state.cuerpoPrincipal + "<br>" + add)
+    : add;
+  state.cuerpoCustom = true;
+  const cuerpoEditor = document.getElementById("cuerpoPrincipalEditor");
+  if (cuerpoEditor) cuerpoEditor.innerHTML = state.cuerpoPrincipal;
+  updatePreview();
+  return true;
+}
+
 function bindParrafosEvents() {
   const sel = document.getElementById("parrafoSelector");
   const nombre = document.getElementById("parrafoNombre");
@@ -2639,20 +2688,7 @@ function bindParrafosEvents() {
   btnInsertar.addEventListener("click", () => {
     const p = state.bibliotecaParrafos.find(x => x.id === (sel.value || state.parrafoSeleccionadoId));
     if (!p) { showStatus("Seleccione un párrafo para insertar.", "err"); return; }
-    const tipo = tipoById(state.tipoEscritoId);
-    if (tipo.estructurado) {
-      showStatus("Este tipo de escrito usa cuerpo estructurado; cambie a un tipo editable para insertar párrafos.", "err");
-      return;
-    }
-    const add = `<div>${p.contenido}</div>`;
-    state.cuerpoPrincipal = (state.cuerpoPrincipal || "").trim()
-      ? (state.cuerpoPrincipal + "<br>" + add)
-      : add;
-    state.cuerpoCustom = true;
-    const cuerpoEditor = document.getElementById("cuerpoPrincipalEditor");
-    if (cuerpoEditor) cuerpoEditor.innerHTML = state.cuerpoPrincipal;
-    updatePreview();
-    showStatus("Párrafo insertado en el cuerpo principal.", "ok");
+    if (insertParrafoEnCuerpo(p)) showStatus("Párrafo insertado en el cuerpo principal.", "ok");
   });
 
   btnEliminar.addEventListener("click", () => {
@@ -2670,6 +2706,80 @@ function bindParrafosEvents() {
     syncInstant();
     renderParrafosBiblioteca();
     showStatus("Párrafo eliminado.", "ok");
+  });
+}
+
+function openBibliotecaParrafos() {
+  renderBibliotecaParrafos();
+  document.getElementById("modalParrafosBackdrop").classList.add("open");
+}
+function closeBibliotecaParrafos() {
+  document.getElementById("modalParrafosBackdrop").classList.remove("open");
+}
+function renderBibliotecaParrafos() {
+  dedupeParrafos();
+  const wrap = document.getElementById("bibliotecaParrafosList");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!state.bibliotecaParrafos.length) {
+    wrap.innerHTML = `<p style="color:var(--muted); font-size:13px;">No hay párrafos guardados todavía.</p>`;
+    return;
+  }
+  state.bibliotecaParrafos
+    .slice()
+    .sort((a,b) => (b.actualizadoEn||"").localeCompare(a.actualizadoEn||""))
+    .forEach((p, i) => {
+      const item = document.createElement("div");
+      item.className = "lib-item";
+      item.innerHTML = `
+        <div class="title">${escapeHtml(p.nombre || "Sin nombre")}</div>
+        <div class="content">${rich2br(p.contenido || "")}</div>
+        <div class="actions-row">
+          <button type="button" class="btn primary small" data-insert-parrafo="${i}">Insertar en el escrito</button>
+          <button type="button" class="btn small danger" data-del-parrafo="${i}">Eliminar</button>
+        </div>`;
+      wrap.appendChild(item);
+    });
+}
+function bindBibliotecaParrafosEvents() {
+  const openBtn = document.getElementById("openBibliotecaParrafos");
+  const closeBtn = document.getElementById("modalParrafosClose");
+  const backdrop = document.getElementById("modalParrafosBackdrop");
+  const list = document.getElementById("bibliotecaParrafosList");
+  if (!openBtn || !closeBtn || !backdrop || !list) return;
+  openBtn.addEventListener("click", openBibliotecaParrafos);
+  closeBtn.addEventListener("click", closeBibliotecaParrafos);
+  backdrop.addEventListener("click", e => {
+    if (e.target.id === "modalParrafosBackdrop") closeBibliotecaParrafos();
+  });
+  list.addEventListener("click", e => {
+    const el = e.target;
+    if (el.dataset.insertParrafo != null) {
+      const i = parseInt(el.dataset.insertParrafo, 10);
+      const p = state.bibliotecaParrafos
+        .slice()
+        .sort((a,b) => (b.actualizadoEn||"").localeCompare(a.actualizadoEn||""))[i];
+      if (!p) return;
+      if (insertParrafoEnCuerpo(p)) {
+        showStatus("Párrafo insertado en el cuerpo principal.", "ok");
+        closeBibliotecaParrafos();
+      }
+      return;
+    }
+    if (el.dataset.delParrafo != null) {
+      const i = parseInt(el.dataset.delParrafo, 10);
+      const p = state.bibliotecaParrafos
+        .slice()
+        .sort((a,b) => (b.actualizadoEn||"").localeCompare(a.actualizadoEn||""))[i];
+      if (!p) return;
+      if (!window.confirm(`¿Eliminar párrafo «${p.nombre}»?`)) return;
+      state.bibliotecaParrafos = state.bibliotecaParrafos.filter(x => x.id !== p.id);
+      saveBibliotecaParrafos();
+      Sync.onParrafoDelete(p.id);
+      syncInstant();
+      renderParrafosBiblioteca();
+      showStatus("Párrafo eliminado.", "ok");
+    }
   });
 }
 
@@ -3389,6 +3499,7 @@ async function init() {
   bindPreviewEditEvents();
   bindCamposVariablesEvents();
   bindParrafosEvents();
+  bindBibliotecaParrafosEvents();
   bindOtrosiesEvents();
   bindBibliotecaEvents();
   bindBibliotecaEscritosEvents();
