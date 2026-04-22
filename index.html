@@ -647,14 +647,14 @@ function decodeHtmlEntities(s) {
 // Devuelve: Array<Array<{text, bold?, italic?, underline?, lineBreak?}>>
 function htmlToDocxParagraphs(html) {
   const src = String(html||"");
-  // Partir primero por párrafos: si no hay <p>, todo va en uno solo.
+  // Partir primero por párrafos: soporta <p> y <div> como bloques.
   let chunks;
-  if (/<p[\s>]/i.test(src)) {
-    // Extraer el contenido dentro de cada <p>…</p>
+  if (/<(p|div)[\s>]/i.test(src)) {
+    // Extraer el contenido dentro de cada <p>…</p> o <div>…</div>
     chunks = [];
-    const re = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
+    const re = /<(p|div)\b[^>]*>([\s\S]*?)<\/\1>/gi;
     let m;
-    while ((m = re.exec(src)) !== null) chunks.push(m[1]);
+    while ((m = re.exec(src)) !== null) chunks.push(m[2]);
     if (!chunks.length) chunks = [src];
   } else {
     chunks = [src];
@@ -2457,7 +2457,7 @@ function renderBiblioteca() {
     item.className = "lib-item";
     item.innerHTML = `
       <div class="title">${escapeHtml(o.titulo)}</div>
-      <div class="content">${escapeHtml(o.contenido)}</div>
+      <div class="content">${rich2br(o.contenido)}</div>
       <div class="actions-row">
         <button type="button" class="btn primary small" data-insert="${i}">Insertar en el escrito</button>
         <button type="button" class="btn small danger" data-del-lib="${i}">Eliminar</button>
@@ -2529,27 +2529,31 @@ function guardarTipoEscritoActual() {
   const nombre = (window.prompt("Nombre de la plantilla de escrito:") || "").trim();
   if (!nombre) { showStatus("Nombre obligatorio para guardar la plantilla de escrito.", "err"); return; }
   const tipoActual = tipoById(state.tipoEscritoId);
-  const nuevo = {
-    id: "tpl-escrito-" + uuid(),
+  const payload = {
     nombre,
     usaDelegados: !!tipoActual.usaDelegados,
     sumaPorDefecto: (state.sumaPrincipal || "").trim(),
     cuerpoPorDefecto: tipoActual.estructurado
       ? String(tipoActual.generarCuerpoHtml(state) || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
       : (state.cuerpoPrincipal || "").trim(),
-    petitorioPorDefecto: (state.petitorio || "").trim(),
-    creadoEn: new Date().toISOString(),
-    actualizadoEn: new Date().toISOString()
+    petitorioPorDefecto: (state.petitorio || "").trim()
   };
-  state.bibliotecaEscritos.push(nuevo);
+  const existente = state.bibliotecaEscritos.find(t =>
+    t.nombre.trim().toLowerCase() === payload.nombre.trim().toLowerCase()
+  );
+  const now = new Date().toISOString();
+  const modelo = existente
+    ? Object.assign(existente, payload, { actualizadoEn: now })
+    : Object.assign({ id: "tpl-escrito-" + uuid(), creadoEn: now, actualizadoEn: now }, payload);
+  if (!existente) state.bibliotecaEscritos.push(modelo);
   saveBibliotecaEscritos();
-  Sync.onEscritoUpsert(nuevo);
+  Sync.onEscritoUpsert(modelo);
   syncInstant();
   syncTiposDesdeBiblioteca();
-  state.tipoEscritoId = nuevo.id;
+  state.tipoEscritoId = modelo.id;
   renderTipoSelector();
   updatePreview();
-  showStatus("Plantilla de escrito guardada y agregada al selector de tipo.", "ok");
+  showStatus(existente ? "Plantilla de escrito actualizada." : "Plantilla de escrito guardada y agregada al selector de tipo.", "ok");
 }
 
 function bindBibliotecaEscritosEvents() {
