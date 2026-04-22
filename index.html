@@ -399,6 +399,13 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       <button type="button" class="btn small" id="btnInsertarParrafo">Insertar en cuerpo</button>
       <button type="button" class="btn small danger" id="btnEliminarParrafo">Eliminar párrafo</button>
     </div>
+    <div class="field" style="margin-top:10px;">
+      <label>Estructura modular del escrito (plantilla)</label>
+      <div class="actions-row" style="margin-bottom:8px;">
+        <button type="button" class="btn small" id="btnAddModuloParrafo">+ Agregar módulo desde párrafo seleccionado</button>
+      </div>
+      <div id="modulosEscritoList"></div>
+    </div>
 
     <h2 class="spaced">Petitorio (va después de «PIDO A S.S.»)</h2>
     <div class="field">
@@ -1127,6 +1134,7 @@ const Sync = (() => {
         sumaPorDefecto: t.sumaPorDefecto || "",
         cuerpoPorDefecto: t.cuerpoPorDefecto || "",
         petitorioPorDefecto: t.petitorioPorDefecto || "",
+        estructuraJson: Array.isArray(t.estructuraJson) ? t.estructuraJson : [],
         usaDelegados: !!t.usaDelegados
       },
       ts: new Date().toISOString()
@@ -1299,6 +1307,7 @@ const Sync = (() => {
             sumaPorDefecto: srv.sumaPorDefecto || "",
             cuerpoPorDefecto: srv.cuerpoPorDefecto || "",
             petitorioPorDefecto: srv.petitorioPorDefecto || "",
+            estructuraJson: Array.isArray(srv.estructuraJson) ? srv.estructuraJson : [],
             usaDelegados: !!srv.usaDelegados,
             creadoEn: srv.creadoEn,
             actualizadoEn: srv.actualizadoEn
@@ -1901,6 +1910,7 @@ const state = {
   bibliotecaEscritos: [],
   bibliotecaParrafos: [],
   parrafoSeleccionadoId: "",
+  modulosEscritoActual: [],
 
   // campos actuales
   tipoEscritoId: "generico",
@@ -1946,6 +1956,7 @@ function buildTipoDesdeBiblioteca(item) {
     estructurado: false,
     petitorioPorDefecto: () => item.petitorioPorDefecto || "",
     cuerpoPorDefecto: () => item.cuerpoPorDefecto || "",
+    estructuraJson: Array.isArray(item.estructuraJson) ? item.estructuraJson : [],
     esPlantillaGuardada: true
   };
 }
@@ -2037,6 +2048,7 @@ function renderAll() {
   renderSumaBody();
   renderCamposVariables();
   renderParrafosBiblioteca();
+  renderModulosEscrito();
   renderOtrosies();
   updateGuardarPlantillaUI();
   updatePreview();
@@ -2299,6 +2311,44 @@ function renderParrafosBiblioteca() {
     });
 }
 
+function recomputeCuerpoFromModulos() {
+  const blocks = (state.modulosEscritoActual || []).map(m => {
+    if (m.tipo !== "parrafo_ref") return "";
+    const p = state.bibliotecaParrafos.find(x => x.id === m.parrafoId);
+    if (!p) return `<div><span class="bold">[PÁRRAFO ELIMINADO]</span></div>`;
+    return `<div>${p.contenido || ""}</div>`;
+  }).filter(Boolean);
+  if (!blocks.length) return;
+  state.cuerpoPrincipal = blocks.join("<br>");
+  state.cuerpoCustom = true;
+  const ed = document.getElementById("cuerpoPrincipalEditor");
+  if (ed) ed.innerHTML = state.cuerpoPrincipal;
+}
+
+function renderModulosEscrito() {
+  const wrap = document.getElementById("modulosEscritoList");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!state.modulosEscritoActual.length) {
+    wrap.innerHTML = `<p style="color:var(--muted); font-size:12px;">Sin módulos aún. Agregue párrafos para componer una plantilla modular.</p>`;
+    return;
+  }
+  state.modulosEscritoActual.forEach((m, i) => {
+    const p = state.bibliotecaParrafos.find(x => x.id === m.parrafoId);
+    const nombre = p ? p.nombre : "[PÁRRAFO ELIMINADO]";
+    const row = document.createElement("div");
+    row.className = "lib-item";
+    row.innerHTML = `
+      <div class="title">Módulo ${i+1}: ${escapeHtml(nombre)}</div>
+      <div class="actions-row">
+        <button type="button" class="btn small" data-mod-up="${i}" ${i===0?"disabled":""}>▲</button>
+        <button type="button" class="btn small" data-mod-down="${i}" ${i===state.modulosEscritoActual.length-1?"disabled":""}>▼</button>
+        <button type="button" class="btn small danger" data-mod-del="${i}">Quitar</button>
+      </div>`;
+    wrap.appendChild(row);
+  });
+}
+
 // =============== PREVIEW ===============
 function buildSumaLineHtml() {
   const tipo = tipoById(state.tipoEscritoId);
@@ -2469,12 +2519,16 @@ function cambiarTipoEscrito(nuevoId) {
   if (!state.cuerpoCustom || nuevo.estructurado) {
     state.cuerpoPrincipal = nuevo.estructurado ? "" : (nuevo.cuerpoPorDefecto ? nuevo.cuerpoPorDefecto(state) : "");
     state.cuerpoCustom = false;
+    state.modulosEscritoActual = Array.isArray(nuevo.estructuraJson) ? JSON.parse(JSON.stringify(nuevo.estructuraJson)) : [];
+    if (state.modulosEscritoActual.length) recomputeCuerpoFromModulos();
   } else {
     // Preguntar si quiere descartar
     const ok = window.confirm("El cuerpo actual fue editado manualmente. ¿Desea reemplazarlo con la plantilla del nuevo tipo?");
     if (ok) {
       state.cuerpoPrincipal = nuevo.estructurado ? "" : (nuevo.cuerpoPorDefecto ? nuevo.cuerpoPorDefecto(state) : "");
       state.cuerpoCustom = false;
+      state.modulosEscritoActual = Array.isArray(nuevo.estructuraJson) ? JSON.parse(JSON.stringify(nuevo.estructuraJson)) : [];
+      if (state.modulosEscritoActual.length) recomputeCuerpoFromModulos();
     }
   }
 
@@ -2649,7 +2703,9 @@ function bindParrafosEvents() {
   const btnGuardar = document.getElementById("btnGuardarParrafo");
   const btnInsertar = document.getElementById("btnInsertarParrafo");
   const btnEliminar = document.getElementById("btnEliminarParrafo");
-  if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar) return;
+  const btnAddModulo = document.getElementById("btnAddModuloParrafo");
+  const modWrap = document.getElementById("modulosEscritoList");
+  if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar || !btnAddModulo || !modWrap) return;
 
   bindRichShortcuts(ed, () => {});
   bindRichPaste(ed, () => {});
@@ -2706,6 +2762,33 @@ function bindParrafosEvents() {
     syncInstant();
     renderParrafosBiblioteca();
     showStatus("Párrafo eliminado.", "ok");
+  });
+
+  btnAddModulo.addEventListener("click", () => {
+    const p = state.bibliotecaParrafos.find(x => x.id === (sel.value || state.parrafoSeleccionadoId));
+    if (!p) { showStatus("Seleccione un párrafo para agregar como módulo.", "err"); return; }
+    state.modulosEscritoActual.push({ tipo: "parrafo_ref", parrafoId: p.id });
+    recomputeCuerpoFromModulos();
+    renderModulosEscrito();
+    updatePreview();
+    showStatus("Módulo agregado a la plantilla modular del escrito.", "ok");
+  });
+
+  modWrap.addEventListener("click", e => {
+    const el = e.target;
+    if (el.dataset.modDel != null) {
+      const i = parseInt(el.dataset.modDel, 10);
+      state.modulosEscritoActual.splice(i, 1);
+    } else if (el.dataset.modUp != null) {
+      const i = parseInt(el.dataset.modUp, 10);
+      if (i > 0) [state.modulosEscritoActual[i-1], state.modulosEscritoActual[i]] = [state.modulosEscritoActual[i], state.modulosEscritoActual[i-1]];
+    } else if (el.dataset.modDown != null) {
+      const i = parseInt(el.dataset.modDown, 10);
+      if (i < state.modulosEscritoActual.length - 1) [state.modulosEscritoActual[i+1], state.modulosEscritoActual[i]] = [state.modulosEscritoActual[i], state.modulosEscritoActual[i+1]];
+    } else return;
+    recomputeCuerpoFromModulos();
+    renderModulosEscrito();
+    updatePreview();
   });
 }
 
@@ -3209,7 +3292,8 @@ function guardarTipoEscritoActual() {
     cuerpoPorDefecto: tipoActual.estructurado
       ? String(tipoActual.generarCuerpoHtml(state) || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
       : (state.cuerpoPrincipal || "").trim(),
-    petitorioPorDefecto: (state.petitorio || "").trim()
+    petitorioPorDefecto: (state.petitorio || "").trim(),
+    estructuraJson: JSON.parse(JSON.stringify(state.modulosEscritoActual || []))
   };
   const existente = state.bibliotecaEscritos.find(t =>
     t.nombre.trim().toLowerCase() === payload.nombre.trim().toLowerCase()
@@ -3321,6 +3405,7 @@ function bindExportEvents() {
     state.delegantes = [ { nombre:"", genero:"M" } ];
     state.delegados  = [ { nombre:"", rut:"", genero:"M", domicilio:"" } ];
     state.otrosies = [];
+    state.modulosEscritoActual = [];
     state.camposVariables = {};
     state.sumaCustom = false; state.cuerpoCustom = false; state.petitorioCustom = false;
     state.plantillaSeleccionadaId = null;
