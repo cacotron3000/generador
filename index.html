@@ -1257,6 +1257,11 @@ const Sync = (() => {
       saveBibliotecaEscritos();
       syncTiposDesdeBiblioteca();
     }
+    if (otrosiesChanged || escritosChanged) {
+      dedupeBibliotecas();
+      saveBiblioteca();
+      saveBibliotecaEscritos();
+    }
 
     const pulledAt = (pl.server_time || ot.server_time || es.server_time || new Date().toISOString());
     setState({ lastPullAt: pulledAt, lastError: null });
@@ -1383,6 +1388,34 @@ function escapeHtml(s) {
 function nl2br(s) { return escapeHtml(s).replace(/\n/g,"<br/>"); }
 function rich2br(s) { return String(s||"").replace(/\n/g,"<br/>"); }
 function safeTextarea(s) { return String(s||"").replace(/<\/textarea/gi, "&lt;/textarea"); }
+function normalizeLibText(s) {
+  return String(s || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+function dedupeBibliotecas() {
+  const seenOtrosies = new Set();
+  state.bibliotecaOtrosies = state.bibliotecaOtrosies.filter(o => {
+    const key = normalizeLibText(o.titulo) + "||" + normalizeLibText(o.contenido);
+    if (seenOtrosies.has(key)) return false;
+    seenOtrosies.add(key);
+    return true;
+  });
+  const seenEscritos = new Set();
+  state.bibliotecaEscritos = state.bibliotecaEscritos.filter(t => {
+    const key = [
+      normalizeLibText(t.nombre),
+      normalizeLibText(t.sumaPorDefecto),
+      normalizeLibText(t.cuerpoPorDefecto),
+      normalizeLibText(t.petitorioPorDefecto)
+    ].join("||");
+    if (seenEscritos.has(key)) return false;
+    seenEscritos.add(key);
+    return true;
+  });
+}
 function applyFormatToEditor(editor, cmd) {
   if (!editor) return;
   editor.focus();
@@ -2311,6 +2344,7 @@ function bindOtrosiesEvents() {
       if (!(o.titulo||"").trim()) { showStatus("El otrosí debe tener título para guardarse en biblioteca.", "err"); return; }
       const nuevo = { id: uuid(), titulo: o.titulo, contenido: o.contenido, actualizadoEn: new Date().toISOString() };
       state.bibliotecaOtrosies.push(nuevo);
+      dedupeBibliotecas();
       saveBiblioteca();
       Sync.onOtrosiUpsert(nuevo);
       syncInstant();
@@ -2488,6 +2522,7 @@ function importarJSON(e) {
         escritosNuevos.forEach(t => { if (!idsEscr.has(t.id)) state.bibliotecaEscritos.push(t); });
       }
       savePlantillas();
+      dedupeBibliotecas();
       saveBiblioteca();
       saveBibliotecaEscritos();
       syncTiposDesdeBiblioteca();
@@ -2513,6 +2548,7 @@ function closeBiblioteca() {
   document.getElementById("modalBackdrop").classList.remove("open");
 }
 function renderBiblioteca() {
+  dedupeBibliotecas();
   const wrap = document.getElementById("bibliotecaList");
   wrap.innerHTML = "";
   if (!state.bibliotecaOtrosies.length) {
@@ -2572,6 +2608,7 @@ function closeBibliotecaEscritos() {
   document.getElementById("modalEscritosBackdrop").classList.remove("open");
 }
 function renderBibliotecaEscritos() {
+  dedupeBibliotecas();
   const wrap = document.getElementById("bibliotecaEscritosList");
   wrap.innerHTML = "";
   if (!state.bibliotecaEscritos.length) {
@@ -2613,6 +2650,7 @@ function guardarTipoEscritoActual() {
     ? Object.assign(existente, payload, { actualizadoEn: now })
     : Object.assign({ id: "tpl-escrito-" + uuid(), creadoEn: now, actualizadoEn: now }, payload);
   if (!existente) state.bibliotecaEscritos.push(modelo);
+  dedupeBibliotecas();
   saveBibliotecaEscritos();
   Sync.onEscritoUpsert(modelo);
   syncInstant();
