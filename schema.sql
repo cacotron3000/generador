@@ -46,3 +46,21 @@ CREATE TABLE IF NOT EXISTS escritos_biblioteca (
   KEY idx_escritos_actualizado_en (actualizado_en),
   KEY idx_escritos_eliminado_en (eliminado_en)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- Migración para instalaciones existentes (evita errores por columnas faltantes)
+-- ----------------------------------------------------------------------------
+ALTER TABLE escritos_biblioteca
+  ADD COLUMN IF NOT EXISTS nombre        VARCHAR(190) NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS titulo        VARCHAR(190) NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS contenido     MEDIUMTEXT NOT NULL,
+  ADD COLUMN IF NOT EXISTS suma          TEXT NOT NULL,
+  ADD COLUMN IF NOT EXISTS cuerpo        MEDIUMTEXT NOT NULL,
+  ADD COLUMN IF NOT EXISTS petitorio     TEXT NOT NULL,
+  ADD COLUMN IF NOT EXISTS usa_delegados TINYINT(1) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS creado_en     DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS actualizado_en DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS eliminado_en  DATETIME(3) NULL DEFAULT NULL;
+
+-- Si vienes de versión antigua con tabla separada de otrosíes:
+DROP TABLE IF EXISTS otrosies_biblioteca;
