@@ -1122,6 +1122,21 @@ const Sync = (() => {
     enqueue({ kind: "escrito", op: "delete", uuid, ts: new Date().toISOString() });
     scheduleFlush();
   }
+  function onParrafoUpsert(p) {
+    if (!isConfigured()) return;
+    enqueue({
+      kind: "parrafo", op: "upsert",
+      uuid: p.id,
+      payload: { uuid: p.id, nombre: p.nombre, contenido: p.contenido },
+      ts: new Date().toISOString()
+    });
+    scheduleFlush();
+  }
+  function onParrafoDelete(uuid) {
+    if (!isConfigured()) return;
+    enqueue({ kind: "parrafo", op: "delete", uuid, ts: new Date().toISOString() });
+    scheduleFlush();
+  }
 
   // ----- Flush (push) -----
   let flushTimer = null;
@@ -1141,7 +1156,8 @@ const Sync = (() => {
         const path =
           op.kind === "plantilla" ? "/plantillas.php" :
           op.kind === "otrosi" ? "/otrosies.php" :
-          "/escritos.php";
+          op.kind === "escrito" ? "/escritos.php" :
+          "/parrafos.php";
         if (op.op === "upsert") {
           await apiFetch(path, { method: "POST", body: op.payload });
         } else if (op.op === "delete") {
@@ -1175,12 +1191,14 @@ const Sync = (() => {
     const forceFull =
       state.plantillas.length === 0 ||
       state.bibliotecaOtrosies.length === 0 ||
-      state.bibliotecaEscritos.length === 0;
+      state.bibliotecaEscritos.length === 0 ||
+      state.bibliotecaParrafos.length === 0;
     const since = forceFull ? "1970-01-01T00:00:00.000Z" : (st.lastPullAt || "1970-01-01T00:00:00.000Z");
 
     let plantillasChanged = 0;
     let otrosiesChanged = 0;
     let escritosChanged = 0;
+    let parrafosChanged = 0;
 
     // Plantillas
     const pl = await apiFetch("/plantillas.php?since=" + encodeURIComponent(since));
@@ -1285,22 +1303,51 @@ const Sync = (() => {
       saveBibliotecaEscritos();
     }
 
-    const pulledAt = (pl.server_time || ot.server_time || es.server_time || new Date().toISOString());
+    // Párrafos
+    const pa = await apiFetch("/parrafos.php?since=" + encodeURIComponent(since));
+    const pByIdLocal = new Map(state.bibliotecaParrafos.map(p => [p.id, p]));
+    (pa.parrafos || []).forEach(srv => {
+      if (srv.eliminadoEn) {
+        const before = state.bibliotecaParrafos.length;
+        state.bibliotecaParrafos = state.bibliotecaParrafos.filter(p => p.id !== srv.uuid);
+        if (state.bibliotecaParrafos.length !== before) parrafosChanged++;
+      } else {
+        const local = pByIdLocal.get(srv.uuid);
+        const srvTs = Date.parse(srv.actualizadoEn || 0);
+        const locTs = local ? Date.parse(local.actualizadoEn || 0) : 0;
+        if (!local || srvTs > locTs) {
+          const merged = {
+            id: srv.uuid,
+            nombre: srv.nombre || "",
+            contenido: srv.contenido || "",
+            creadoEn: srv.creadoEn,
+            actualizadoEn: srv.actualizadoEn
+          };
+          if (local) Object.assign(local, merged);
+          else state.bibliotecaParrafos.push(merged);
+          parrafosChanged++;
+        }
+      }
+    });
+    if (parrafosChanged) saveBibliotecaParrafos();
+
+    const pulledAt = (pl.server_time || ot.server_time || es.server_time || pa.server_time || new Date().toISOString());
     setState({ lastPullAt: pulledAt, lastError: null });
     notifyStatus();
-    const changed = (plantillasChanged + otrosiesChanged + escritosChanged) > 0;
+    const changed = (plantillasChanged + otrosiesChanged + escritosChanged + parrafosChanged) > 0;
     if (changed) {
       try {
-        const ev = new CustomEvent("sync-pulled", { detail: { plantillas: plantillasChanged, otrosies: otrosiesChanged, escritos: escritosChanged } });
+        const ev = new CustomEvent("sync-pulled", { detail: { plantillas: plantillasChanged, otrosies: otrosiesChanged, escritos: escritosChanged, parrafos: parrafosChanged } });
         window.dispatchEvent(ev);
       } catch (e) { /* noop */ }
     }
     return {
-      pulled: (pl.plantillas || []).length + (ot.otrosies || []).length + (es.escritos || []).length,
+      pulled: (pl.plantillas || []).length + (ot.otrosies || []).length + (es.escritos || []).length + (pa.parrafos || []).length,
       changed,
       plantillasChanged,
       otrosiesChanged,
-      escritosChanged
+      escritosChanged,
+      parrafosChanged
     };
   }
 
@@ -1360,6 +1407,7 @@ const Sync = (() => {
     onPlantillaUpsert, onPlantillaDelete,
     onOtrosiUpsert, onOtrosiDelete,
     onEscritoUpsert, onEscritoDelete,
+    onParrafoUpsert, onParrafoDelete,
     flush, pull, syncNow, testConnection,
     startAuto, stopAuto, notifyStatus
   };
@@ -2582,6 +2630,8 @@ function bindParrafosEvents() {
       item.actualizadoEn = now;
     }
     saveBibliotecaParrafos();
+    Sync.onParrafoUpsert(item);
+    syncInstant();
     renderParrafosBiblioteca();
     showStatus("Párrafo guardado en biblioteca.", "ok");
   });
@@ -2616,6 +2666,8 @@ function bindParrafosEvents() {
     nombre.value = "";
     ed.innerHTML = "";
     saveBibliotecaParrafos();
+    Sync.onParrafoDelete(id);
+    syncInstant();
     renderParrafosBiblioteca();
     showStatus("Párrafo eliminado.", "ok");
   });
@@ -3357,12 +3409,14 @@ async function init() {
     renderBiblioteca();
     renderTipoSelector();
     renderBibliotecaEscritos();
+    renderParrafosBiblioteca();
     updatePreview();
     const det = (ev && ev.detail) || {};
     const partes = [];
     if (det.plantillas) partes.push(det.plantillas + " plantilla" + (det.plantillas===1?"":"s"));
     if (det.otrosies)   partes.push(det.otrosies + " otrosí" + (det.otrosies===1?"":"es"));
     if (det.escritos)   partes.push(det.escritos + " plantilla" + (det.escritos===1?"":"s") + " de escrito");
+    if (det.parrafos)   partes.push(det.parrafos + " párrafo" + (det.parrafos===1?"":"s"));
     if (partes.length) showStatus("Cambios recibidos del servidor: " + partes.join(" y ") + ".", "ok");
   });
 
