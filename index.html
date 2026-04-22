@@ -1395,10 +1395,35 @@ function stripHtml(s) {
   return String(s || "").replace(/<[^>]+>/g, " ");
 }
 function tokenToLabel(token) {
-  return token.replace(/^\[|\]$/g, "");
+  return token.replace(/^\[|\]$/g, "").toUpperCase();
 }
 function variableFieldId(sourceId, index) {
   return `${sourceId}::${index}`;
+}
+const PALABRAS_RECURRENTES = [
+  "DEMANDADO",
+  "DEMANDANTE",
+  "DEMANDADA",
+  "DEMANDADO PRINCIPAL",
+  "DEMANDADO SOLIDARIO",
+  "RUT DEMANDADO PRINCIPAL",
+  "RUT DEMANDADO SOLIDARIO",
+  "REPRESENTANTE LEGAL DEMANDADO PRINCIPAL",
+  "REPRESENTANTE LEGAL DEMANDADO SOLIDARIO",
+  "REMUNERACIÓN 172",
+  "FECHA DE INICIO RELACIÓN LABORAL",
+  "FECHA DE TÉRMINO RELACIÓN LABORAL"
+];
+function normalizeRecurrentWord(s) {
+  return String(s || "").replace(/\s+/g, " ").trim().toUpperCase();
+}
+function isTokenRecurrent(token) {
+  const inner = tokenToLabel(token);
+  return PALABRAS_RECURRENTES.some(w => normalizeRecurrentWord(w) === normalizeRecurrentWord(inner));
+}
+function resolveVariableId(sourceId, index, token) {
+  if (isTokenRecurrent(token)) return `recurrente::${normalizeRecurrentWord(tokenToLabel(token))}`;
+  return variableFieldId(sourceId || "global", index);
 }
 function applyVariablesToHtml(html, sourceId) {
   let out = String(html || "");
@@ -1406,7 +1431,7 @@ function applyVariablesToHtml(html, sourceId) {
   out = out.replace(/\[[^\]\r\n]+\]/g, (tok) => {
     i++;
     if (tok.toUpperCase() === "[PETITORIO]") return tok;
-    const id = variableFieldId(sourceId || "global", i);
+    const id = resolveVariableId(sourceId || "global", i, tok);
     const richValue = String((state.camposVariables || {})[id] || "");
     return richValue || tok;
   });
@@ -1418,7 +1443,7 @@ function applyVariablesToText(text, sourceId) {
   out = out.replace(/\[[^\]\r\n]+\]/g, (tok) => {
     i++;
     if (tok.toUpperCase() === "[PETITORIO]") return tok;
-    const id = variableFieldId(sourceId || "global", i);
+    const id = resolveVariableId(sourceId || "global", i, tok);
     const richValue = String((state.camposVariables || {})[id] || "");
     const replacement = richValue ? stripHtml(richValue).replace(/\s+/g, " ").trim() : tok;
     return replacement;
@@ -2036,15 +2061,21 @@ function detectTokensActuales() {
 
   const occurrences = [];
   const tokenCounts = {};
+  const seenRecurrentIds = new Set();
   sources.forEach(src => {
     const matches = extractBracketTokens(stripHtml(src.text));
     matches.forEach((tok, idx) => {
-      tokenCounts[tok] = (tokenCounts[tok] || 0) + 1;
+      const tokenKey = normalizeRecurrentWord(tokenToLabel(tok));
+      tokenCounts[tokenKey] = (tokenCounts[tokenKey] || 0) + 1;
+      const id = resolveVariableId(src.id, idx + 1, tok);
+      if (id.startsWith("recurrente::") && seenRecurrentIds.has(id)) return;
+      if (id.startsWith("recurrente::")) seenRecurrentIds.add(id);
       occurrences.push({
-        id: variableFieldId(src.id, idx + 1),
+        id,
         sourceId: src.id,
         token: tok,
-        serial: tokenCounts[tok]
+        serial: tokenCounts[tokenKey],
+        recurrente: id.startsWith("recurrente::")
       });
     });
   });
@@ -2067,7 +2098,7 @@ function renderCamposVariables() {
 
   occurrences.forEach(o => {
     const value = state.camposVariables[o.id] || "";
-    const label = `${tokenToLabel(o.token)} ${o.serial}`;
+    const label = o.recurrente ? tokenToLabel(o.token) : `${tokenToLabel(o.token)} ${o.serial}`;
     const card = document.createElement("div");
     card.className = "field";
     card.style.marginBottom = "8px";
