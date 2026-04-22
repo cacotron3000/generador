@@ -329,6 +329,20 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
         <input type="text" id="numeroCausa" placeholder="Ej.: T-123-2026">
       </div>
     </div>
+    <div class="field">
+      <label>Modalidad de comparecencia</label>
+      <select id="modalidadComparecencia">
+        <option value="mero-tramite">1. Mero trámite</option>
+        <option value="con-patrocinio-poder">2. Con patrocinio y poder</option>
+        <option value="con-mandato-judicial">3. Con mandato judicial</option>
+      </select>
+    </div>
+    <div id="comparecenciaExtras" style="display:none;">
+      <div class="field"><label>Cliente</label><input type="text" id="clienteNombre" placeholder="Ej.: Juan Pérez González"></div>
+      <div class="field"><label>Profesión / oficio del cliente</label><input type="text" id="clienteProfesion" placeholder="Ej.: contador auditor"></div>
+      <div class="field"><label>RUT del cliente</label><input type="text" id="clienteRut" placeholder="Ej.: 12.345.678-5"></div>
+      <div class="field"><label>Domicilio para estos efectos</label><input type="text" id="comparecenciaDomicilio" placeholder="Ej.: Av. Apoquindo 1234, oficina 501, Las Condes"></div>
+    </div>
 
     <h2 class="spaced">Abogado/a que comparece</h2>
     <div id="delegantesList"></div>
@@ -809,35 +823,45 @@ function buildDocxSumaRuns() {
 }
 
 function buildDocxComparecenciaRuns() {
+  const modo = state.modalidadComparecencia || "mero-tramite";
   const d = concordanciaDelegantes(state.delegantes);
-  // Nombres: array de {text,bold}
   const runs = [];
+  if (modo === "con-patrocinio-poder") {
+    const cliente = applyVariablesToText((state.clienteNombre || "").trim() || "[CLIENTE]", "comparecencia");
+    const profesion = applyVariablesToText((state.clienteProfesion || "").trim() || "[PROFESIÓN/OFICIO]", "comparecencia");
+    const rut = applyVariablesToText((state.clienteRut || "").trim() || "[NÚMERO DE RUT]", "comparecencia");
+    const domicilio = applyVariablesToText((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]", "comparecencia");
+    runs.push({ text: cliente, bold: true });
+    runs.push({ text: `, ${profesion}, RUT ${rut}, domiciliado para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:` });
+    return runs;
+  }
+  if (modo === "con-mandato-judicial") {
+    const cliente = applyVariablesToText((state.clienteNombre || "").trim() || "[CLIENTE]", "comparecencia");
+    const domicilio = applyVariablesToText((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]", "comparecencia");
+    const nombres = d.act.length ? joinNames(d.act.map(p => p.nombre.trim().toUpperCase())) : "[ABOGADO/A O ABOGADOS/AS]";
+    runs.push({ text: nombres, bold: true });
+    runs.push({ text: `, abogado, en representación de ${cliente}, según se acreditará, todos domiciliados para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:` });
+    return runs;
+  }
+
   const act = (state.delegantes||[]).filter(p => (p.nombre||"").trim());
   const pl  = act.length > 1;
   const g   = groupGender(state.delegantes||[]);
-  if (act.length === 0) {
-    runs.push({ text: "[ABOGADO/A O ABOGADOS/AS]", bold: true });
-  } else {
-    const names = act.map(p => p.nombre.trim().toUpperCase());
-    const joined = names.length === 1 ? names[0]
-                 : names.length === 2 ? `${names[0]}, y ${names[1]}`
-                 : `${names.slice(0,-1).join(", ")}, y ${names[names.length-1]}`;
-    runs.push({ text: joined, bold: true });
-  }
+  if (act.length === 0) runs.push({ text: "[ABOGADO/A O ABOGADOS/AS]", bold: true });
+  else runs.push({ text: joinNames(act.map(p => p.nombre.trim().toUpperCase())), bold: true });
   const profesion = pl ? (g === "F" ? "abogadas" : "abogados") : (g === "F" ? "abogada" : "abogado");
   const parte     = (state.parte||"").trim() || "demandada";
   const materia   = applyVariablesToText((state.materia||"").trim() || "[MATERIA]", "comparecencia");
   const caratula  = applyVariablesToText(((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase(), "comparecencia");
   const tipo      = state.tipoCausa;
   const numero    = applyVariablesToText((state.numeroCausa||"").trim() || "[NÚMERO]", "comparecencia");
-  const digo      = d.digo;
   runs.push({ text: `, ${profesion}, por la parte ${parte}, en autos sobre ${materia}, caratulada ` });
   runs.push({ text: "\u201C" + caratula + "\u201D", bold: true });
   runs.push({ text: ", Causa " });
   runs.push({ text: tipo, bold: true });
   runs.push({ text: " " });
   runs.push({ text: numero, bold: true });
-  runs.push({ text: `, a S.S., respetuosamente, ${digo}:` });
+  runs.push({ text: `, a S.S., respetuosamente, ${d.digo}:` });
   return runs;
 }
 
@@ -1920,6 +1944,11 @@ const state = {
   tipoCausa: "RIT",
   numeroCausa: "",
   parte: "demandada",
+  modalidadComparecencia: "mero-tramite",
+  clienteNombre: "",
+  clienteProfesion: "",
+  clienteRut: "",
+  comparecenciaDomicilio: "",
   delegantes: [ { nombre:"", genero:"M" } ],
   delegados:  [ { nombre:"", rut:"", genero:"M", domicilio:"" } ],
 
@@ -1992,6 +2021,11 @@ function capturarEncabezadoActual() {
     tipoCausa: state.tipoCausa,
     numeroCausa: state.numeroCausa,
     parte: state.parte,
+    modalidadComparecencia: state.modalidadComparecencia,
+    clienteNombre: state.clienteNombre,
+    clienteProfesion: state.clienteProfesion,
+    clienteRut: state.clienteRut,
+    comparecenciaDomicilio: state.comparecenciaDomicilio,
     delegantes: JSON.parse(JSON.stringify(state.delegantes)),
     delegados:  JSON.parse(JSON.stringify(state.delegados))
   };
@@ -2026,6 +2060,11 @@ function aplicarEncabezadoAlState(enc) {
   state.tipoCausa   = enc.tipoCausa || "RIT";
   state.numeroCausa = enc.numeroCausa || "";
   state.parte       = enc.parte || "demandada";
+  state.modalidadComparecencia = enc.modalidadComparecencia || "mero-tramite";
+  state.clienteNombre = enc.clienteNombre || "";
+  state.clienteProfesion = enc.clienteProfesion || "";
+  state.clienteRut = enc.clienteRut || "";
+  state.comparecenciaDomicilio = enc.comparecenciaDomicilio || "";
   state.delegantes  = (enc.delegantes && enc.delegantes.length) ? enc.delegantes : [ { nombre:"", genero:"M" } ];
   // Asegurar forma consistente de delegados (agrega domicilio:"" si falta, para compatibilidad hacia atrás).
   if (enc.delegados && enc.delegados.length) {
@@ -2103,6 +2142,25 @@ function renderEncabezadoFields() {
   setVal("tipoCausa", state.tipoCausa);
   setVal("numeroCausa", state.numeroCausa);
   setVal("parte", state.parte);
+  setVal("modalidadComparecencia", state.modalidadComparecencia);
+  setVal("clienteNombre", state.clienteNombre);
+  setVal("clienteProfesion", state.clienteProfesion);
+  setVal("clienteRut", state.clienteRut);
+  setVal("comparecenciaDomicilio", state.comparecenciaDomicilio);
+  applyComparecenciaModeUI();
+}
+
+function applyComparecenciaModeUI() {
+  const modo = state.modalidadComparecencia || "mero-tramite";
+  const usaPlantilla = (modo === "mero-tramite");
+  const extras = document.getElementById("comparecenciaExtras");
+  if (extras) extras.style.display = usaPlantilla ? "none" : "";
+  ["plantillaSelector","btnGuardarPlantilla","btnDuplicarPlantilla","btnEliminarPlantilla"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !usaPlantilla;
+  });
+  if (!usaPlantilla) state.plantillaSeleccionadaId = null;
+  renderPlantillaSelector();
 }
 
 function renderDelegantes() {
@@ -2365,7 +2423,20 @@ function buildSumaLineHtml() {
 }
 
 function buildComparecenciaHtml() {
+  const modo = state.modalidadComparecencia || "mero-tramite";
   const d = concordanciaDelegantes(state.delegantes);
+  if (modo === "con-patrocinio-poder") {
+    const cliente = escapeHtml((state.clienteNombre || "").trim() || "[CLIENTE]");
+    const profesion = escapeHtml((state.clienteProfesion || "").trim() || "[PROFESIÓN/OFICIO]");
+    const rut = escapeHtml((state.clienteRut || "").trim() || "[NÚMERO DE RUT]");
+    const domicilio = escapeHtml((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]");
+    return applyVariablesToHtml(`<span class="bold">${cliente}</span>, ${profesion}, RUT ${rut}, domiciliado para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:`, "comparecencia");
+  }
+  if (modo === "con-mandato-judicial") {
+    const cliente = escapeHtml((state.clienteNombre || "").trim() || "[CLIENTE]");
+    const domicilio = escapeHtml((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]");
+    return applyVariablesToHtml(`<span class="bold">${d.nombresHtml || "[ABOGADO/A O ABOGADOS/AS]"}</span>, abogado, en representación de ${cliente}, según se acreditará, todos domiciliados para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:`, "comparecencia");
+  }
   const materia  = escapeHtml((state.materia||"").trim() || "[MATERIA]");
   const caratula = escapeHtml(((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase());
   const tipo     = escapeHtml(state.tipoCausa);
@@ -2492,7 +2563,7 @@ function checkRutsOrConfirm() {
 
 // =============== EVENTS ===============
 function bindEncabezadoEvents() {
-  ["tribunal","materia","caratula","numeroCausa","parte"].forEach(id => {
+  ["tribunal","materia","caratula","numeroCausa","parte","clienteNombre","clienteProfesion","clienteRut","comparecenciaDomicilio"].forEach(id => {
     document.getElementById(id).addEventListener("input", e => {
       state[id] = e.target.value;
       updatePreview();
@@ -2500,6 +2571,11 @@ function bindEncabezadoEvents() {
   });
   document.getElementById("tipoCausa").addEventListener("change", e => {
     state.tipoCausa = e.target.value;
+    updatePreview();
+  });
+  document.getElementById("modalidadComparecencia").addEventListener("change", e => {
+    state.modalidadComparecencia = e.target.value;
+    applyComparecenciaModeUI();
     updatePreview();
   });
 }
@@ -3019,6 +3095,11 @@ function bindOtrosiesEvents() {
 // =============== PLANTILLAS (encabezado) ===============
 function bindPlantillaEvents() {
   document.getElementById("plantillaSelector").addEventListener("change", e => {
+    if ((state.modalidadComparecencia || "mero-tramite") !== "mero-tramite") {
+      e.target.value = "";
+      showStatus("Las plantillas de causa solo aplican en modalidad «Mero trámite».", "err");
+      return;
+    }
     const id = e.target.value;
     if (!id) {
       state.plantillaSeleccionadaId = null;
@@ -3402,6 +3483,9 @@ function bindExportEvents() {
     if (!window.confirm("¿Limpiar todos los campos del formulario? (las plantillas guardadas se conservan)")) return;
     state.tribunal = ""; state.materia = ""; state.caratula = "";
     state.tipoCausa = "RIT"; state.numeroCausa = ""; state.parte = "demandada";
+    state.modalidadComparecencia = "mero-tramite";
+    state.clienteNombre = ""; state.clienteProfesion = "";
+    state.clienteRut = ""; state.comparecenciaDomicilio = "";
     state.delegantes = [ { nombre:"", genero:"M" } ];
     state.delegados  = [ { nombre:"", rut:"", genero:"M", domicilio:"" } ];
     state.otrosies = [];
