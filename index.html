@@ -261,15 +261,10 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 <body>
 
 <h1>Generador de escritos</h1>
-<div class="subtitle">Selecciona el tipo de escrito, rellena los campos y agrega otrosíes. Puedes guardar los datos del encabezado como plantilla por causa y reutilizarlos después.</div>
+<div class="subtitle">Rellena los datos del escrito, guarda plantillas de causa y de tipo de escrito, y agrega otrosíes.</div>
 
 <!-- Top bar: plantilla selector -->
 <div class="topbar">
-  <label>Plantilla de causa:</label>
-  <select id="plantillaSelector"></select>
-  <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
-  <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
-  <button class="btn small danger" id="btnEliminarPlantilla">Eliminar</button>
   <span class="spacer"></span>
   <span id="syncChip" class="sync-chip sync-off" title="Estado de sincronización con el servidor">● Sin conectar</span>
   <button class="btn small" id="btnSyncNow" title="Sincronizar ahora con el servidor" style="display:none;">Sincronizar</button>
@@ -284,20 +279,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
   <!-- ============ FORM ============ -->
   <div class="panel">
 
-    <div class="field">
-      <label>Tipo de escrito</label>
-      <select id="tipoEscrito"></select>
-      <div class="row-inline" style="margin-top:6px;">
-        <button type="button" class="btn small" id="btnGuardarTipoEscrito">Guardar plantilla de escrito</button>
-        <button type="button" class="btn small" id="openBibliotecaEscritos">Biblioteca de escritos</button>
-      </div>
-    </div>
-
-    <h2 class="spaced">Datos del escrito</h2>
+    <h2>Datos del escrito</h2>
     <div class="field"><label>Tribunal</label><input type="text" id="tribunal" placeholder="Ej.: PRIMER JUZGADO DE LETRAS DEL TRABAJO DE SANTIAGO"></div>
     <div class="field"><label>Materia</label><input type="text" id="materia" placeholder="Ej.: despido injustificado"></div>
     <div class="field"><label>Carátula <span class="hint">(se mostrará siempre en mayúsculas)</span></label><input type="text" id="caratula" placeholder="Ej.: Pérez con Empresa X S.A."></div>
-    <div class="field"><label>Parte que representa</label><input type="text" id="parte" placeholder="demandada / demandante / querellada"></div>
+    <div class="field"><label>Parte que presenta</label><input type="text" id="parte" placeholder="demandada / demandante / querellada"></div>
     <div class="field">
       <label>RIT / ROL y número</label>
       <div class="row-2">
@@ -306,9 +292,22 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       </div>
     </div>
 
-    <h2 class="spaced">Abogado/a(s) que comparece(n)</h2>
+    <h2 class="spaced">Abogado/a que comparece</h2>
     <div id="delegantesList"></div>
     <button type="button" class="add-btn" id="addDelegante">+ Agregar firmante</button>
+
+    <div class="actions">
+      <label style="margin:0;">Plantilla de causa</label>
+      <select id="plantillaSelector" style="min-width:260px; width:auto;"></select>
+      <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
+      <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
+      <button class="btn small danger" id="btnEliminarPlantilla">Eliminar</button>
+    </div>
+
+    <h2 class="spaced">Tipo de escrito</h2>
+    <div class="field">
+      <select id="tipoEscrito"></select>
+    </div>
 
     <div id="delegadosSection">
       <h2 class="spaced">Abogado/a(s) beneficiario/a(s) <span class="hint" style="text-transform:none; letter-spacing:0;">(delegados, patrocinados, etc.)</span></h2>
@@ -332,6 +331,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <h2 class="spaced">Petitorio (va después de «PIDO A S.S.»)</h2>
     <div class="field">
       <input type="text" id="petitorio" placeholder="Ej.: tener presente la delegación de poder.">
+    </div>
+
+    <div class="actions" style="margin-top:10px;">
+      <button type="button" class="btn small" id="btnGuardarTipoEscrito">Guardar plantilla de escrito</button>
+      <button type="button" class="btn small" id="openBibliotecaEscritos">Biblioteca de escritos</button>
     </div>
 
     <h2 class="spaced">Otrosíes
