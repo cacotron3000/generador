@@ -256,20 +256,17 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 .lib-item .title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .lib-item .content { font-size: 12px; color: var(--muted); white-space: pre-wrap; max-height: 80px; overflow: hidden; }
 .lib-item .actions-row { margin-top: 8px; display: flex; gap: 6px; }
+
+.format-bar { display:flex; gap:6px; flex-wrap:wrap; margin: 6px 0; }
 </style>
 </head>
 <body>
 
 <h1>Generador de escritos</h1>
-<div class="subtitle">Selecciona el tipo de escrito, rellena los campos y agrega otrosíes. Puedes guardar los datos del encabezado como plantilla por causa y reutilizarlos después.</div>
+<div class="subtitle">Rellena los datos del escrito, guarda plantillas de causa y de tipo de escrito, y agrega otrosíes.</div>
 
 <!-- Top bar: plantilla selector -->
 <div class="topbar">
-  <label>Plantilla de causa:</label>
-  <select id="plantillaSelector"></select>
-  <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
-  <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
-  <button class="btn small danger" id="btnEliminarPlantilla">Eliminar</button>
   <span class="spacer"></span>
   <span id="syncChip" class="sync-chip sync-off" title="Estado de sincronización con el servidor">● Sin conectar</span>
   <button class="btn small" id="btnSyncNow" title="Sincronizar ahora con el servidor" style="display:none;">Sincronizar</button>
@@ -284,16 +281,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
   <!-- ============ FORM ============ -->
   <div class="panel">
 
-    <div class="field">
-      <label>Tipo de escrito</label>
-      <select id="tipoEscrito"></select>
-    </div>
-
-    <h2 class="spaced">Datos del escrito</h2>
+    <h2>Datos del escrito</h2>
     <div class="field"><label>Tribunal</label><input type="text" id="tribunal" placeholder="Ej.: PRIMER JUZGADO DE LETRAS DEL TRABAJO DE SANTIAGO"></div>
     <div class="field"><label>Materia</label><input type="text" id="materia" placeholder="Ej.: despido injustificado"></div>
     <div class="field"><label>Carátula <span class="hint">(se mostrará siempre en mayúsculas)</span></label><input type="text" id="caratula" placeholder="Ej.: Pérez con Empresa X S.A."></div>
-    <div class="field"><label>Parte que representa</label><input type="text" id="parte" placeholder="demandada / demandante / querellada"></div>
+    <div class="field"><label>Parte que presenta</label><input type="text" id="parte" placeholder="demandada / demandante / querellada"></div>
     <div class="field">
       <label>RIT / ROL y número</label>
       <div class="row-2">
@@ -302,9 +294,22 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       </div>
     </div>
 
-    <h2 class="spaced">Abogado/a(s) que comparece(n)</h2>
+    <h2 class="spaced">Abogado/a que comparece</h2>
     <div id="delegantesList"></div>
     <button type="button" class="add-btn" id="addDelegante">+ Agregar firmante</button>
+
+    <div class="actions">
+      <label style="margin:0;">Plantilla de causa</label>
+      <select id="plantillaSelector" style="min-width:260px; width:auto;"></select>
+      <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
+      <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
+      <button class="btn small danger" id="btnEliminarPlantilla">Eliminar</button>
+    </div>
+
+    <h2 class="spaced">Tipo de escrito</h2>
+    <div class="field">
+      <select id="tipoEscrito"></select>
+    </div>
 
     <div id="delegadosSection">
       <h2 class="spaced">Abogado/a(s) beneficiario/a(s) <span class="hint" style="text-transform:none; letter-spacing:0;">(delegados, patrocinados, etc.)</span></h2>
@@ -318,6 +323,13 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     </div>
 
     <h2 class="spaced">Cuerpo principal</h2>
+    <div class="format-bar" id="cuerpoFormatBar">
+      <button type="button" class="btn small" data-cmd="bold"><b>N</b></button>
+      <button type="button" class="btn small" data-cmd="italic"><i>I</i></button>
+      <button type="button" class="btn small" data-cmd="underline"><u>S</u></button>
+      <button type="button" class="btn small" data-cmd="indent">Sangría</button>
+      <button type="button" class="btn small" data-cmd="linebreak">↵</button>
+    </div>
     <div id="cuerpoTextareaWrap">
       <textarea id="cuerpoPrincipal" rows="8" class="prose" placeholder="Redacte el cuerpo del escrito…"></textarea>
     </div>
@@ -328,6 +340,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <h2 class="spaced">Petitorio (va después de «PIDO A S.S.»)</h2>
     <div class="field">
       <input type="text" id="petitorio" placeholder="Ej.: tener presente la delegación de poder.">
+    </div>
+
+    <div class="actions" style="margin-top:10px;">
+      <button type="button" class="btn small" id="btnGuardarTipoEscrito">Guardar plantilla de escrito</button>
+      <button type="button" class="btn small" id="openBibliotecaEscritos">Biblioteca de escritos</button>
     </div>
 
     <h2 class="spaced">Otrosíes
@@ -384,20 +401,32 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
   </div>
 </div>
 
+<!-- Modal biblioteca de escritos -->
+<div class="modal-backdrop" id="modalEscritosBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalEscritosTitle">
+    <button class="close" id="modalEscritosClose" title="Cerrar">×</button>
+    <h3 id="modalEscritosTitle">Biblioteca de plantillas de escrito</h3>
+    <p style="color:var(--muted); font-size:13px; margin-top:0;">
+      Las plantillas guardadas aquí se agregan al selector de tipo de escrito.
+    </p>
+    <div id="bibliotecaEscritosList"></div>
+  </div>
+</div>
+
 <!-- Modal: Configuración de sincronización -->
 <div class="modal-backdrop" id="syncModalBackdrop">
   <div class="modal">
     <button class="close" id="syncModalClose" title="Cerrar">×</button>
     <h3>Sincronización con servidor</h3>
     <p style="color: var(--muted); font-size: 13px; margin-top: 0;">
-      Las plantillas de causa y los otrosíes de biblioteca se guardarán en tu servidor (cPanel) y estarán disponibles en cualquier equipo con acceso.
+      Las plantillas de causa, los otrosíes y las plantillas de escrito se guardarán en tu servidor (cPanel) y estarán disponibles en cualquier equipo con acceso.
       Mientras no haya conexión, los cambios se guardan localmente y se sincronizan automáticamente al recuperarla.
     </p>
 
     <div class="field">
       <label>URL base de la API</label>
       <input type="text" id="syncApiUrl" placeholder="https://tudominio.cl/generador/api">
-      <span class="hint" style="text-transform:none; letter-spacing:0;">Sin barra final. Debe apuntar a la carpeta que contiene plantillas.php y otrosies.php.</span>
+      <span class="hint" style="text-transform:none; letter-spacing:0;">Sin barra final. Debe apuntar a la carpeta que contiene plantillas.php, otrosies.php y escritos.php.</span>
     </div>
     <div class="field">
       <label>Token de acceso</label>
@@ -750,9 +779,9 @@ function buildDocxCuerpoParas() {
     return paragraphs.map(runs => dxP(dxRuns(runs), { align: "both", indent: 720 }));
   }
   // Tipos libres: el textarea contiene solo texto plano; separamos por líneas en blanco.
-  const txt = state.cuerpoPrincipal || "";
-  const blocks = txt.split(/\n{2,}/);
-  return blocks.map(b => dxP(dxRuns([{ text: b.replace(/\n/g, " ") }]), { align: "both", indent: 720 }));
+  const html = state.cuerpoPrincipal || "";
+  const paragraphs = htmlToDocxParagraphs(html);
+  return paragraphs.map(runs => dxP(dxRuns(runs), { align: "both", indent: 720 }));
 }
 
 function buildDocxDocument() {
@@ -778,11 +807,17 @@ function buildDocxDocument() {
   // OTROSÍES
   state.otrosies.forEach((o, i) => {
     paras.push(dxP(""));
-    paras.push(dxP(dxRuns([
+    const parsed = htmlToDocxParagraphs(o.contenido || "");
+    if (!parsed.length) parsed.push([{ text: "" }]);
+    const firstRuns = [
       { text: ordinalOtrosi(i+1) + ": ", bold: true },
       { text: ((o.titulo||"").trim() || "[TÍTULO]") + ". ", bold: true },
-      { text: (o.contenido||"").replace(/\n/g, " ") }
-    ]), { align: "both", indent: 720 }));
+      ...parsed[0]
+    ];
+    paras.push(dxP(dxRuns(firstRuns), { align: "both", indent: 720 }));
+    for (let p = 1; p < parsed.length; p++) {
+      paras.push(dxP(dxRuns(parsed[p]), { align: "both", indent: 720 }));
+    }
   });
   // Section properties — márgenes A4 ~2.54/3.0/2.54/3.0 cm (= 1440/1701/1440/1701 twips)
   const sectPr = `<w:sectPr>
@@ -885,6 +920,7 @@ function buildDocxBlob() {
 const LS = {
   plantillas:  "escritos.plantillas.v1",
   biblioteca:  "escritos.bibliotecaOtrosies.v1",
+  bibliotecaEscritos: "escritos.bibliotecaEscritos.v1",
   syncConfig:  "escritos.sync.config.v1",
   syncPending: "escritos.sync.pending.v1",
   syncState:   "escritos.sync.state.v1"
@@ -1014,6 +1050,28 @@ const Sync = (() => {
     enqueue({ kind: "otrosi", op: "delete", uuid, ts: new Date().toISOString() });
     scheduleFlush();
   }
+  function onEscritoUpsert(t) {
+    if (!isConfigured()) return;
+    enqueue({
+      kind: "escrito", op: "upsert",
+      uuid: t.id,
+      payload: {
+        uuid: t.id,
+        nombre: t.nombre,
+        sumaPorDefecto: t.sumaPorDefecto || "",
+        cuerpoPorDefecto: t.cuerpoPorDefecto || "",
+        petitorioPorDefecto: t.petitorioPorDefecto || "",
+        usaDelegados: !!t.usaDelegados
+      },
+      ts: new Date().toISOString()
+    });
+    scheduleFlush();
+  }
+  function onEscritoDelete(uuid) {
+    if (!isConfigured()) return;
+    enqueue({ kind: "escrito", op: "delete", uuid, ts: new Date().toISOString() });
+    scheduleFlush();
+  }
 
   // ----- Flush (push) -----
   let flushTimer = null;
@@ -1030,7 +1088,10 @@ const Sync = (() => {
     let sent = 0;
     for (const op of q) {
       try {
-        const path = op.kind === "plantilla" ? "/plantillas.php" : "/otrosies.php";
+        const path =
+          op.kind === "plantilla" ? "/plantillas.php" :
+          op.kind === "otrosi" ? "/otrosies.php" :
+          "/escritos.php";
         if (op.op === "upsert") {
           await apiFetch(path, { method: "POST", body: op.payload });
         } else if (op.op === "delete") {
@@ -1059,10 +1120,17 @@ const Sync = (() => {
   async function pull() {
     if (!isConfigured()) return { pulled: 0, changed: false };
     const st = getState();
-    const since = st.lastPullAt || "1970-01-01T00:00:00.000Z";
+    // Si el catálogo local está vacío, forzamos carga completa desde servidor.
+    // Evita quedar "vacío para siempre" cuando existe lastPullAt pero no hay datos locales.
+    const forceFull =
+      state.plantillas.length === 0 ||
+      state.bibliotecaOtrosies.length === 0 ||
+      state.bibliotecaEscritos.length === 0;
+    const since = forceFull ? "1970-01-01T00:00:00.000Z" : (st.lastPullAt || "1970-01-01T00:00:00.000Z");
 
     let plantillasChanged = 0;
     let otrosiesChanged = 0;
+    let escritosChanged = 0;
 
     // Plantillas
     const pl = await apiFetch("/plantillas.php?since=" + encodeURIComponent(since));
@@ -1128,17 +1196,57 @@ const Sync = (() => {
     });
     if (otrosiesChanged) saveBiblioteca();
 
-    const pulledAt = (pl.server_time || ot.server_time || new Date().toISOString());
+    // Plantillas de escrito
+    const es = await apiFetch("/escritos.php?since=" + encodeURIComponent(since));
+    const eByIdLocal = new Map(state.bibliotecaEscritos.map(t => [t.id, t]));
+    (es.escritos || []).forEach(srv => {
+      if (srv.eliminadoEn) {
+        const before = state.bibliotecaEscritos.length;
+        state.bibliotecaEscritos = state.bibliotecaEscritos.filter(t => t.id !== srv.uuid);
+        if (state.bibliotecaEscritos.length !== before) escritosChanged++;
+      } else {
+        const local = eByIdLocal.get(srv.uuid);
+        const srvTs = Date.parse(srv.actualizadoEn || 0);
+        const locTs = local ? Date.parse(local.actualizadoEn || 0) : 0;
+        if (!local || srvTs > locTs) {
+          const merged = {
+            id: srv.uuid,
+            nombre: srv.nombre,
+            sumaPorDefecto: srv.sumaPorDefecto || "",
+            cuerpoPorDefecto: srv.cuerpoPorDefecto || "",
+            petitorioPorDefecto: srv.petitorioPorDefecto || "",
+            usaDelegados: !!srv.usaDelegados,
+            creadoEn: srv.creadoEn,
+            actualizadoEn: srv.actualizadoEn
+          };
+          if (local) Object.assign(local, merged);
+          else state.bibliotecaEscritos.push(merged);
+          escritosChanged++;
+        }
+      }
+    });
+    if (escritosChanged) {
+      saveBibliotecaEscritos();
+      syncTiposDesdeBiblioteca();
+    }
+
+    const pulledAt = (pl.server_time || ot.server_time || es.server_time || new Date().toISOString());
     setState({ lastPullAt: pulledAt, lastError: null });
     notifyStatus();
-    const changed = (plantillasChanged + otrosiesChanged) > 0;
+    const changed = (plantillasChanged + otrosiesChanged + escritosChanged) > 0;
     if (changed) {
       try {
-        const ev = new CustomEvent("sync-pulled", { detail: { plantillas: plantillasChanged, otrosies: otrosiesChanged } });
+        const ev = new CustomEvent("sync-pulled", { detail: { plantillas: plantillasChanged, otrosies: otrosiesChanged, escritos: escritosChanged } });
         window.dispatchEvent(ev);
       } catch (e) { /* noop */ }
     }
-    return { pulled: (pl.plantillas || []).length + (ot.otrosies || []).length, changed, plantillasChanged, otrosiesChanged };
+    return {
+      pulled: (pl.plantillas || []).length + (ot.otrosies || []).length + (es.escritos || []).length,
+      changed,
+      plantillasChanged,
+      otrosiesChanged,
+      escritosChanged
+    };
   }
 
   async function syncNow() {
@@ -1196,6 +1304,7 @@ const Sync = (() => {
     getPending, getState, getStatusSummary,
     onPlantillaUpsert, onPlantillaDelete,
     onOtrosiUpsert, onOtrosiDelete,
+    onEscritoUpsert, onEscritoDelete,
     flush, pull, syncNow, testConnection,
     startAuto, stopAuto, notifyStatus
   };
@@ -1244,6 +1353,27 @@ function escapeHtml(s) {
   return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 function nl2br(s) { return escapeHtml(s).replace(/\n/g,"<br/>"); }
+function rich2br(s) { return String(s||"").replace(/\n/g,"<br/>"); }
+function safeTextarea(s) { return String(s||"").replace(/<\/textarea/gi, "&lt;/textarea"); }
+function wrapTextareaSelection(ta, before, after) {
+  ta.focus();
+  const start = ta.selectionStart || 0;
+  const end = ta.selectionEnd || 0;
+  const val = ta.value || "";
+  const selected = val.slice(start, end);
+  ta.value = val.slice(0, start) + before + selected + after + val.slice(end);
+  const pos = start + before.length + selected.length + after.length;
+  ta.selectionStart = ta.selectionEnd = pos;
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+function applyFormatToTextarea(ta, cmd) {
+  if (!ta) return;
+  if (cmd === "bold") return wrapTextareaSelection(ta, "<strong>", "</strong>");
+  if (cmd === "italic") return wrapTextareaSelection(ta, "<em>", "</em>");
+  if (cmd === "underline") return wrapTextareaSelection(ta, "<u>", "</u>");
+  if (cmd === "indent") return wrapTextareaSelection(ta, '<p class="indent">', "</p>");
+  if (cmd === "linebreak") return wrapTextareaSelection(ta, "<br>", "");
+}
 function joinNames(arr) {
   if (arr.length === 0) return "";
   if (arr.length === 1) return arr[0];
@@ -1463,9 +1593,10 @@ const state = {
   plantillas: [],
   plantillaSeleccionadaId: null,
   bibliotecaOtrosies: [],
+  bibliotecaEscritos: [],
 
   // campos actuales
-  tipoEscritoId: "delega-poder",
+  tipoEscritoId: "generico",
   tribunal: "",
   materia: "",
   caratula: "",
@@ -1486,13 +1617,37 @@ const state = {
 
 // =============== PERSISTENCE ===============
 function loadFromStorage() {
-  try { state.plantillas = JSON.parse(localStorage.getItem(LS.plantillas) || "[]"); }
-  catch (e) { state.plantillas = []; }
-  try { state.bibliotecaOtrosies = JSON.parse(localStorage.getItem(LS.biblioteca) || "[]"); }
-  catch (e) { state.bibliotecaOtrosies = []; }
+  // Catálogos se cargan desde cPanel vía sincronización.
+  state.plantillas = [];
+  state.bibliotecaOtrosies = [];
+  state.bibliotecaEscritos = [];
 }
 function savePlantillas()  { localStorage.setItem(LS.plantillas, JSON.stringify(state.plantillas)); }
 function saveBiblioteca()  { localStorage.setItem(LS.biblioteca, JSON.stringify(state.bibliotecaOtrosies)); }
+function saveBibliotecaEscritos() { localStorage.setItem(LS.bibliotecaEscritos, JSON.stringify(state.bibliotecaEscritos)); }
+
+function buildTipoDesdeBiblioteca(item) {
+  return {
+    id: item.id,
+    nombre: item.nombre,
+    sumaPorDefecto: item.sumaPorDefecto || "",
+    usaDelegados: !!item.usaDelegados,
+    estructurado: false,
+    petitorioPorDefecto: () => item.petitorioPorDefecto || "",
+    cuerpoPorDefecto: () => item.cuerpoPorDefecto || "",
+    esPlantillaGuardada: true
+  };
+}
+
+function syncTiposDesdeBiblioteca() {
+  for (let i = TIPOS.length - 1; i >= 0; i--) {
+    if (TIPOS[i].esPlantillaGuardada) TIPOS.splice(i, 1);
+  }
+  state.bibliotecaEscritos.forEach(item => TIPOS.push(buildTipoDesdeBiblioteca(item)));
+  if (!TIPOS.some(t => t.id === state.tipoEscritoId)) {
+    state.tipoEscritoId = TIPOS.some(t => t.id === "generico") ? "generico" : TIPOS[0].id;
+  }
+}
 
 // Auto-name template from ROL + carátula
 function nombrePlantillaAuto(enc) {
@@ -1512,6 +1667,28 @@ function capturarEncabezadoActual() {
     delegantes: JSON.parse(JSON.stringify(state.delegantes)),
     delegados:  JSON.parse(JSON.stringify(state.delegados))
   };
+}
+
+function encabezadoCompletoParaGuardar(enc) {
+  const firmantes = (enc.delegantes || []).filter(p => (p.nombre || "").trim());
+  return !!(
+    (enc.tribunal || "").trim() &&
+    (enc.materia || "").trim() &&
+    (enc.caratula || "").trim() &&
+    (enc.numeroCausa || "").trim() &&
+    (enc.parte || "").trim() &&
+    firmantes.length
+  );
+}
+
+function updateGuardarPlantillaUI() {
+  const btn = document.getElementById("btnGuardarPlantilla");
+  if (!btn) return;
+  const ok = encabezadoCompletoParaGuardar(capturarEncabezadoActual());
+  btn.disabled = !ok;
+  btn.title = ok
+    ? "Guardar plantilla de causa"
+    : "Complete tribunal, materia, carátula, RIT/ROL, parte y al menos un firmante para guardar.";
 }
 
 function aplicarEncabezadoAlState(enc) {
@@ -1542,23 +1719,24 @@ function renderAll() {
   renderDelegadosIfNeeded();
   renderSumaBody();
   renderOtrosies();
+  updateGuardarPlantillaUI();
   updatePreview();
 }
 
 function renderTipoSelector() {
   const sel = document.getElementById("tipoEscrito");
-  if (sel.options.length === 0) {
-    for (const t of TIPOS) {
-      const opt = document.createElement("option");
-      opt.value = t.id; opt.textContent = t.nombre;
-      sel.appendChild(opt);
-    }
+  sel.innerHTML = "";
+  for (const t of TIPOS) {
+    const opt = document.createElement("option");
+    opt.value = t.id; opt.textContent = t.nombre;
+    sel.appendChild(opt);
   }
   sel.value = state.tipoEscritoId;
   // Ajustar visibilidad de delegados, textarea de cuerpo
   const tipo = tipoById(state.tipoEscritoId);
   document.getElementById("delegadosSection").style.display = tipo.usaDelegados ? "" : "none";
   document.getElementById("cuerpoTextareaWrap").style.display = tipo.estructurado ? "none" : "";
+  document.getElementById("cuerpoFormatBar").style.display = tipo.estructurado ? "none" : "flex";
   document.getElementById("cuerpoNotaEstructurado").style.display = tipo.estructurado ? "" : "none";
 }
 
@@ -1678,7 +1856,14 @@ function renderOtrosies() {
         <input type="text" class="o-titulo" data-i="${i}" value="${escapeHtml(o.titulo)}" placeholder="Título / suma del otrosí (ej.: Acompaña documentos)">
       </div>
       <div class="field" style="margin-bottom:0;">
-        <textarea class="o-contenido prose" data-i="${i}" rows="3" placeholder="Contenido del otrosí…">${escapeHtml(o.contenido)}</textarea>
+        <div class="format-bar">
+          <button type="button" class="btn small" data-format-otrosi="bold" data-i="${i}"><b>N</b></button>
+          <button type="button" class="btn small" data-format-otrosi="italic" data-i="${i}"><i>I</i></button>
+          <button type="button" class="btn small" data-format-otrosi="underline" data-i="${i}"><u>S</u></button>
+          <button type="button" class="btn small" data-format-otrosi="indent" data-i="${i}">Sangría</button>
+          <button type="button" class="btn small" data-format-otrosi="linebreak" data-i="${i}">↵</button>
+        </div>
+        <textarea class="o-contenido prose" data-i="${i}" rows="3" placeholder="Contenido del otrosí…">${safeTextarea(o.contenido)}</textarea>
       </div>`;
     wrap.appendChild(card);
   });
@@ -1714,7 +1899,7 @@ function buildCuerpoPrincipalHtml() {
   if (tipo.estructurado) {
     return tipo.generarCuerpoHtml(state);
   }
-  return nl2br(state.cuerpoPrincipal || "");
+  return rich2br(state.cuerpoPrincipal || "");
 }
 
 function buildPetitorioHtml() {
@@ -1726,7 +1911,7 @@ function buildPetitorioHtml() {
 function buildOtrosiesHtml() {
   return state.otrosies.map((o, i) => {
     const titulo = escapeHtml((o.titulo||"").trim() || "[TÍTULO]");
-    const contenido = nl2br(o.contenido || "");
+    const contenido = rich2br(o.contenido || "");
     return `<p class="indent"><span class="bold">${ordinalOtrosi(i+1)}:</span> <span class="otrosi-title">${titulo}.</span> ${contenido}</p>`;
   }).join("");
 }
@@ -1744,6 +1929,7 @@ function updatePreview() {
   document.getElementById("cuerpoPrincipal").placeholder = tipo.estructurado ? "" : "Redacte el cuerpo del escrito…";
   document.getElementById("sumaPrincipal").placeholder = tipo.sumaPorDefecto || "Ej.: Solicita lo que indica";
   document.getElementById("petitorio").placeholder = tipo.petitorioPorDefecto(state);
+  updateGuardarPlantillaUI();
 }
 
 // =============== EXPORT (Copy / DOCX) ===============
@@ -1771,7 +1957,7 @@ function buildExportHtml(includeLogos) {
   const petitorio = buildPetitorioHtml();
   const otrosiesArr = state.otrosies.map((o, i) => {
     const titulo = escapeHtml((o.titulo||"").trim() || "[TÍTULO]");
-    const contenido = nl2br(o.contenido || "");
+    const contenido = rich2br(o.contenido || "");
     return `<p style="${baseStyle} ${indent}"><b>${ordinalOtrosi(i+1)}:</b> <b>${titulo}.</b> ${contenido}</p>`;
   }).join("");
 
@@ -1798,6 +1984,13 @@ function showStatus(msg, kind) {
   el.className = "status " + (kind || "ok");
   el.textContent = msg;
   setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3500);
+}
+
+function syncInstant() {
+  if (!Sync.isConfigured()) return;
+  Sync.syncNow()
+    .then(() => { renderAll(); renderSyncChip(); })
+    .catch(() => { renderSyncChip(); });
 }
 
 function checkRutsOrConfirm() {
@@ -1893,6 +2086,11 @@ function bindSumaBodyEvents() {
     renderSumaBody();
     updatePreview();
     showStatus("Cuerpo y suma regenerados desde la plantilla del tipo.", "ok");
+  });
+  document.getElementById("cuerpoFormatBar").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-cmd]");
+    if (!btn) return;
+    applyFormatToTextarea(document.getElementById("cuerpoPrincipal"), btn.dataset.cmd);
   });
 }
 
@@ -2003,7 +2201,14 @@ function bindOtrosiesEvents() {
       state.bibliotecaOtrosies.push(nuevo);
       saveBiblioteca();
       Sync.onOtrosiUpsert(nuevo);
+      syncInstant();
       showStatus("Otrosí guardado en biblioteca.", "ok");
+      return;
+    }
+    if (el.dataset.formatOtrosi != null) {
+      const i = parseInt(el.dataset.i, 10);
+      const ta = wrap.querySelector(`textarea.o-contenido[data-i="${i}"]`);
+      applyFormatToTextarea(ta, el.dataset.formatOtrosi);
       return;
     }
   });
@@ -2048,6 +2253,10 @@ function cargarPlantilla(id) {
 
 function guardarPlantilla() {
   const enc = capturarEncabezadoActual();
+  if (!encabezadoCompletoParaGuardar(enc)) {
+    showStatus("Complete los datos de la causa antes de guardar la plantilla.", "err");
+    return;
+  }
   const nombre = nombrePlantillaAuto(enc);
   if (state.plantillaSeleccionadaId) {
     // Actualizar existente
@@ -2058,6 +2267,7 @@ function guardarPlantilla() {
     p.actualizadoEn = new Date().toISOString();
     savePlantillas();
     Sync.onPlantillaUpsert(p);
+    syncInstant();
     renderPlantillaSelector();
     showStatus(`Plantilla actualizada: ${nombre}`, "ok");
   } else {
@@ -2068,6 +2278,7 @@ function guardarPlantilla() {
     state.plantillaSeleccionadaId = nueva.id;
     savePlantillas();
     Sync.onPlantillaUpsert(nueva);
+    syncInstant();
     renderPlantillaSelector();
     showStatus(`Plantilla creada: ${nombre}`, "ok");
   }
@@ -2089,6 +2300,7 @@ function duplicarPlantilla() {
   state.plantillaSeleccionadaId = copia.id;
   savePlantillas();
   Sync.onPlantillaUpsert(copia);
+  syncInstant();
   renderPlantillaSelector();
   showStatus(`Plantilla duplicada: ${copia.nombre}`, "ok");
 }
@@ -2103,6 +2315,7 @@ function eliminarPlantilla() {
   state.plantillaSeleccionadaId = null;
   savePlantillas();
   Sync.onPlantillaDelete(uuidEliminado);
+  syncInstant();
   renderPlantillaSelector();
   showStatus("Plantilla eliminada.", "ok");
 }
@@ -2112,7 +2325,8 @@ function exportarJSON() {
     version: "1.0",
     exportadoEn: new Date().toISOString(),
     plantillas: state.plantillas,
-    bibliotecaOtrosies: state.bibliotecaOtrosies
+    bibliotecaOtrosies: state.bibliotecaOtrosies,
+    bibliotecaEscritos: state.bibliotecaEscritos
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -2134,6 +2348,7 @@ function importarJSON(e) {
       if (!data || typeof data !== "object") throw new Error("JSON inválido");
       const plantillasNuevas = Array.isArray(data.plantillas) ? data.plantillas : [];
       const bibNueva = Array.isArray(data.bibliotecaOtrosies) ? data.bibliotecaOtrosies : [];
+      const escritosNuevos = Array.isArray(data.bibliotecaEscritos) ? data.bibliotecaEscritos : [];
 
       const modo = window.prompt(
         "Importación:\n" +
@@ -2146,17 +2361,23 @@ function importarJSON(e) {
       if (modo.trim().toLowerCase() === "reemplazar") {
         state.plantillas = plantillasNuevas;
         state.bibliotecaOtrosies = bibNueva;
+        state.bibliotecaEscritos = escritosNuevos;
       } else {
         // Fusionar por id
         const idsExistentes = new Set(state.plantillas.map(p => p.id));
         plantillasNuevas.forEach(p => { if (!idsExistentes.has(p.id)) state.plantillas.push(p); });
         const idsBib = new Set(state.bibliotecaOtrosies.map(b => b.id));
         bibNueva.forEach(b => { if (!idsBib.has(b.id)) state.bibliotecaOtrosies.push(b); });
+        const idsEscr = new Set(state.bibliotecaEscritos.map(t => t.id));
+        escritosNuevos.forEach(t => { if (!idsEscr.has(t.id)) state.bibliotecaEscritos.push(t); });
       }
       savePlantillas();
       saveBiblioteca();
+      saveBibliotecaEscritos();
+      syncTiposDesdeBiblioteca();
+      renderTipoSelector();
       renderPlantillaSelector();
-      showStatus(`Importadas ${plantillasNuevas.length} plantilla(s) y ${bibNueva.length} otrosí(es).`, "ok");
+      showStatus(`Importadas ${plantillasNuevas.length} plantilla(s), ${bibNueva.length} otrosí(es) y ${escritosNuevos.length} plantilla(s) de escrito.`, "ok");
     } catch (err) {
       showStatus("Error al importar JSON: " + err.message, "err");
     } finally {
@@ -2168,6 +2389,7 @@ function importarJSON(e) {
 
 // =============== BIBLIOTECA DE OTROSÍES ===============
 function openBiblioteca() {
+  syncInstant();
   renderBiblioteca();
   document.getElementById("modalBackdrop").classList.add("open");
 }
@@ -2218,7 +2440,102 @@ function bindBibliotecaEvents() {
       state.bibliotecaOtrosies.splice(i, 1);
       saveBiblioteca();
       Sync.onOtrosiDelete(uuidEliminado);
+      syncInstant();
       renderBiblioteca();
+    }
+  });
+}
+
+// =============== BIBLIOTECA DE ESCRITOS ===============
+function openBibliotecaEscritos() {
+  syncInstant();
+  renderBibliotecaEscritos();
+  document.getElementById("modalEscritosBackdrop").classList.add("open");
+}
+function closeBibliotecaEscritos() {
+  document.getElementById("modalEscritosBackdrop").classList.remove("open");
+}
+function renderBibliotecaEscritos() {
+  const wrap = document.getElementById("bibliotecaEscritosList");
+  wrap.innerHTML = "";
+  if (!state.bibliotecaEscritos.length) {
+    wrap.innerHTML = `<p style="color:var(--muted); font-size:13px;">No hay plantillas de escrito guardadas todavía.</p>`;
+    return;
+  }
+  state.bibliotecaEscritos.forEach((t, i) => {
+    const item = document.createElement("div");
+    item.className = "lib-item";
+    item.innerHTML = `
+      <div class="title">${escapeHtml(t.nombre)}</div>
+      <div class="content">Suma: ${escapeHtml(t.sumaPorDefecto || "—")} · Petitorio: ${escapeHtml(t.petitorioPorDefecto || "—")}</div>
+      <div class="actions-row">
+        <button type="button" class="btn primary small" data-use-written="${i}">Usar</button>
+        <button type="button" class="btn small danger" data-del-written="${i}">Eliminar</button>
+      </div>`;
+    wrap.appendChild(item);
+  });
+}
+
+function guardarTipoEscritoActual() {
+  const nombre = (window.prompt("Nombre de la plantilla de escrito:") || "").trim();
+  if (!nombre) { showStatus("Nombre obligatorio para guardar la plantilla de escrito.", "err"); return; }
+  const tipoActual = tipoById(state.tipoEscritoId);
+  const nuevo = {
+    id: "tpl-escrito-" + uuid(),
+    nombre,
+    usaDelegados: !!tipoActual.usaDelegados,
+    sumaPorDefecto: (state.sumaPrincipal || "").trim(),
+    cuerpoPorDefecto: tipoActual.estructurado
+      ? String(tipoActual.generarCuerpoHtml(state) || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+      : (state.cuerpoPrincipal || "").trim(),
+    petitorioPorDefecto: (state.petitorio || "").trim(),
+    creadoEn: new Date().toISOString(),
+    actualizadoEn: new Date().toISOString()
+  };
+  state.bibliotecaEscritos.push(nuevo);
+  saveBibliotecaEscritos();
+  Sync.onEscritoUpsert(nuevo);
+  syncInstant();
+  syncTiposDesdeBiblioteca();
+  state.tipoEscritoId = nuevo.id;
+  renderTipoSelector();
+  updatePreview();
+  showStatus("Plantilla de escrito guardada y agregada al selector de tipo.", "ok");
+}
+
+function bindBibliotecaEscritosEvents() {
+  document.getElementById("btnGuardarTipoEscrito").addEventListener("click", guardarTipoEscritoActual);
+  document.getElementById("openBibliotecaEscritos").addEventListener("click", openBibliotecaEscritos);
+  document.getElementById("modalEscritosClose").addEventListener("click", closeBibliotecaEscritos);
+  document.getElementById("modalEscritosBackdrop").addEventListener("click", e => {
+    if (e.target.id === "modalEscritosBackdrop") closeBibliotecaEscritos();
+  });
+  document.getElementById("bibliotecaEscritosList").addEventListener("click", e => {
+    const el = e.target;
+    if (el.dataset.useWritten != null) {
+      const i = parseInt(el.dataset.useWritten, 10);
+      const item = state.bibliotecaEscritos[i];
+      if (!item) return;
+      cambiarTipoEscrito(item.id);
+      document.getElementById("tipoEscrito").value = item.id;
+      closeBibliotecaEscritos();
+      showStatus(`Plantilla aplicada: ${item.nombre}`, "ok");
+      return;
+    }
+    if (el.dataset.delWritten != null) {
+      const i = parseInt(el.dataset.delWritten, 10);
+      const item = state.bibliotecaEscritos[i];
+      if (!item) return;
+      if (!window.confirm(`¿Eliminar plantilla de escrito «${item.nombre}»?`)) return;
+      state.bibliotecaEscritos.splice(i, 1);
+      saveBibliotecaEscritos();
+      Sync.onEscritoDelete(item.id);
+      syncInstant();
+      syncTiposDesdeBiblioteca();
+      renderTipoSelector();
+      renderBibliotecaEscritos();
+      updatePreview();
+      showStatus("Plantilla de escrito eliminada.", "ok");
     }
   });
 }
@@ -2439,6 +2756,7 @@ function bindSyncEvents() {
 // =============== INIT ===============
 function init() {
   loadFromStorage();
+  syncTiposDesdeBiblioteca();
   const t = tipoById(state.tipoEscritoId);
   state.sumaPrincipal = t.sumaPorDefecto || "";
   state.cuerpoPrincipal = t.estructurado ? "" : (t.cuerpoPorDefecto ? t.cuerpoPorDefecto(state) : "");
@@ -2451,6 +2769,7 @@ function init() {
   bindSumaBodyEvents();
   bindOtrosiesEvents();
   bindBibliotecaEvents();
+  bindBibliotecaEscritosEvents();
   bindExportEvents();
   bindSyncEvents();
 
@@ -2466,11 +2785,14 @@ function init() {
       if (sel.value !== seleccionadaActual) sel.value = ""; // la plantilla ya no existe
     }
     renderBiblioteca();
+    renderTipoSelector();
+    renderBibliotecaEscritos();
     updatePreview();
     const det = (ev && ev.detail) || {};
     const partes = [];
     if (det.plantillas) partes.push(det.plantillas + " plantilla" + (det.plantillas===1?"":"s"));
     if (det.otrosies)   partes.push(det.otrosies + " otrosí" + (det.otrosies===1?"":"es"));
+    if (det.escritos)   partes.push(det.escritos + " plantilla" + (det.escritos===1?"":"s") + " de escrito");
     if (partes.length) showStatus("Cambios recibidos del servidor: " + partes.join(" y ") + ".", "ok");
   });
 
