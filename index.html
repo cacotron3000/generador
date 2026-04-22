@@ -377,6 +377,25 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <h2 class="spaced" id="camposVarsTitle" style="display:none;">Campos variables detectados</h2>
     <div id="camposVariablesWrap"></div>
 
+    <h2 class="spaced">Biblioteca de párrafos</h2>
+    <div class="field">
+      <label>Plantillas de párrafo guardadas</label>
+      <select id="parrafoSelector"></select>
+    </div>
+    <div class="field">
+      <label>Nombre del párrafo</label>
+      <input type="text" id="parrafoNombre" placeholder="Ej.: Hechos no controvertidos">
+    </div>
+    <div class="field">
+      <label>Contenido del párrafo</label>
+      <div id="parrafoEditor" class="rich-editor prose" contenteditable="true" data-placeholder="Escriba o pegue aquí un párrafo plantilla…"></div>
+    </div>
+    <div class="actions" style="margin-top:8px;">
+      <button type="button" class="btn small" id="btnGuardarParrafo">Guardar párrafo</button>
+      <button type="button" class="btn small" id="btnInsertarParrafo">Insertar en cuerpo</button>
+      <button type="button" class="btn small danger" id="btnEliminarParrafo">Eliminar párrafo</button>
+    </div>
+
     <h2 class="spaced">Petitorio (va después de «PIDO A S.S.»)</h2>
     <div class="field">
       <input type="text" id="petitorio" placeholder="Ej.: tener presente la delegación de poder.">
@@ -951,6 +970,7 @@ const LS = {
   plantillas:  "escritos.plantillas.v1",
   biblioteca:  "escritos.bibliotecaOtrosies.v1",
   bibliotecaEscritos: "escritos.bibliotecaEscritos.v1",
+  bibliotecaParrafos: "escritos.bibliotecaParrafos.v1",
   syncConfig:  "escritos.sync.config.v1",
   syncPending: "escritos.sync.pending.v1",
   syncState:   "escritos.sync.state.v1"
@@ -1802,6 +1822,8 @@ const state = {
   plantillaSeleccionadaId: null,
   bibliotecaOtrosies: [],
   bibliotecaEscritos: [],
+  bibliotecaParrafos: [],
+  parrafoSeleccionadoId: "",
 
   // campos actuales
   tipoEscritoId: "generico",
@@ -1830,10 +1852,13 @@ function loadFromStorage() {
   state.plantillas = [];
   state.bibliotecaOtrosies = [];
   state.bibliotecaEscritos = [];
+  try { state.bibliotecaParrafos = JSON.parse(localStorage.getItem(LS.bibliotecaParrafos) || "[]") || []; }
+  catch (e) { state.bibliotecaParrafos = []; }
 }
 function savePlantillas()  { localStorage.setItem(LS.plantillas, JSON.stringify(state.plantillas)); }
 function saveBiblioteca()  { localStorage.setItem(LS.biblioteca, JSON.stringify(state.bibliotecaOtrosies)); }
 function saveBibliotecaEscritos() { localStorage.setItem(LS.bibliotecaEscritos, JSON.stringify(state.bibliotecaEscritos)); }
+function saveBibliotecaParrafos() { localStorage.setItem(LS.bibliotecaParrafos, JSON.stringify(state.bibliotecaParrafos)); }
 
 function buildTipoDesdeBiblioteca(item) {
   return {
@@ -1934,6 +1959,7 @@ function renderAll() {
   renderDelegadosIfNeeded();
   renderSumaBody();
   renderCamposVariables();
+  renderParrafosBiblioteca();
   renderOtrosies();
   updateGuardarPlantillaUI();
   updatePreview();
@@ -2172,6 +2198,26 @@ function ensureCamposVariablesRendered() {
   for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) { renderCamposVariables(); return; }
   }
+}
+
+function renderParrafosBiblioteca() {
+  const sel = document.getElementById("parrafoSelector");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = "";
+  o0.textContent = "— Seleccione un párrafo guardado —";
+  sel.appendChild(o0);
+  state.bibliotecaParrafos
+    .slice()
+    .sort((a,b) => (b.actualizadoEn||"").localeCompare(a.actualizadoEn||""))
+    .forEach(p => {
+      const o = document.createElement("option");
+      o.value = p.id;
+      o.textContent = p.nombre || "Sin nombre";
+      if (p.id === state.parrafoSeleccionadoId) o.selected = true;
+      sel.appendChild(o);
+    });
 }
 
 // =============== PREVIEW ===============
@@ -2499,6 +2545,82 @@ function bindCamposVariablesEvents() {
   });
 }
 
+function bindParrafosEvents() {
+  const sel = document.getElementById("parrafoSelector");
+  const nombre = document.getElementById("parrafoNombre");
+  const ed = document.getElementById("parrafoEditor");
+  const btnGuardar = document.getElementById("btnGuardarParrafo");
+  const btnInsertar = document.getElementById("btnInsertarParrafo");
+  const btnEliminar = document.getElementById("btnEliminarParrafo");
+  if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar) return;
+
+  bindRichShortcuts(ed, () => {});
+  bindRichPaste(ed, () => {});
+
+  sel.addEventListener("change", () => {
+    state.parrafoSeleccionadoId = sel.value || "";
+    const p = state.bibliotecaParrafos.find(x => x.id === state.parrafoSeleccionadoId);
+    if (!p) { nombre.value = ""; ed.innerHTML = ""; return; }
+    nombre.value = p.nombre || "";
+    ed.innerHTML = p.contenido || "";
+  });
+
+  btnGuardar.addEventListener("click", () => {
+    const nom = (nombre.value || "").trim();
+    const contenido = (ed.innerHTML || "").trim();
+    if (!nom) { showStatus("Ingrese un nombre para el párrafo.", "err"); return; }
+    if (!contenido) { showStatus("Ingrese el contenido del párrafo.", "err"); return; }
+    const now = new Date().toISOString();
+    let item = state.bibliotecaParrafos.find(x => x.id === state.parrafoSeleccionadoId);
+    if (!item) {
+      item = { id: "parrafo-" + uuid(), creadoEn: now, actualizadoEn: now, nombre: nom, contenido };
+      state.bibliotecaParrafos.push(item);
+      state.parrafoSeleccionadoId = item.id;
+    } else {
+      item.nombre = nom;
+      item.contenido = contenido;
+      item.actualizadoEn = now;
+    }
+    saveBibliotecaParrafos();
+    renderParrafosBiblioteca();
+    showStatus("Párrafo guardado en biblioteca.", "ok");
+  });
+
+  btnInsertar.addEventListener("click", () => {
+    const p = state.bibliotecaParrafos.find(x => x.id === (sel.value || state.parrafoSeleccionadoId));
+    if (!p) { showStatus("Seleccione un párrafo para insertar.", "err"); return; }
+    const tipo = tipoById(state.tipoEscritoId);
+    if (tipo.estructurado) {
+      showStatus("Este tipo de escrito usa cuerpo estructurado; cambie a un tipo editable para insertar párrafos.", "err");
+      return;
+    }
+    const add = `<div>${p.contenido}</div>`;
+    state.cuerpoPrincipal = (state.cuerpoPrincipal || "").trim()
+      ? (state.cuerpoPrincipal + "<br>" + add)
+      : add;
+    state.cuerpoCustom = true;
+    const cuerpoEditor = document.getElementById("cuerpoPrincipalEditor");
+    if (cuerpoEditor) cuerpoEditor.innerHTML = state.cuerpoPrincipal;
+    updatePreview();
+    showStatus("Párrafo insertado en el cuerpo principal.", "ok");
+  });
+
+  btnEliminar.addEventListener("click", () => {
+    const id = sel.value || state.parrafoSeleccionadoId;
+    if (!id) { showStatus("Seleccione un párrafo para eliminar.", "err"); return; }
+    const p = state.bibliotecaParrafos.find(x => x.id === id);
+    if (!p) return;
+    if (!window.confirm(`¿Eliminar párrafo «${p.nombre}»?`)) return;
+    state.bibliotecaParrafos = state.bibliotecaParrafos.filter(x => x.id !== id);
+    state.parrafoSeleccionadoId = "";
+    nombre.value = "";
+    ed.innerHTML = "";
+    saveBibliotecaParrafos();
+    renderParrafosBiblioteca();
+    showStatus("Párrafo eliminado.", "ok");
+  });
+}
+
 function bindDelegantesEvents() {
   ["delegantesList","delegadosList"].forEach(id => {
     const wrap = document.getElementById(id);
@@ -2754,7 +2876,8 @@ function exportarJSON() {
     exportadoEn: new Date().toISOString(),
     plantillas: state.plantillas,
     bibliotecaOtrosies: state.bibliotecaOtrosies,
-    bibliotecaEscritos: state.bibliotecaEscritos
+    bibliotecaEscritos: state.bibliotecaEscritos,
+    bibliotecaParrafos: state.bibliotecaParrafos
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -2777,6 +2900,7 @@ function importarJSON(e) {
       const plantillasNuevas = Array.isArray(data.plantillas) ? data.plantillas : [];
       const bibNueva = Array.isArray(data.bibliotecaOtrosies) ? data.bibliotecaOtrosies : [];
       const escritosNuevos = Array.isArray(data.bibliotecaEscritos) ? data.bibliotecaEscritos : [];
+      const parrafosNuevos = Array.isArray(data.bibliotecaParrafos) ? data.bibliotecaParrafos : [];
 
       const modo = window.prompt(
         "Importación:\n" +
@@ -2790,6 +2914,7 @@ function importarJSON(e) {
         state.plantillas = plantillasNuevas;
         state.bibliotecaOtrosies = bibNueva;
         state.bibliotecaEscritos = escritosNuevos;
+        state.bibliotecaParrafos = parrafosNuevos;
       } else {
         // Fusionar por id
         const idsExistentes = new Set(state.plantillas.map(p => p.id));
@@ -2798,15 +2923,19 @@ function importarJSON(e) {
         bibNueva.forEach(b => { if (!idsBib.has(b.id)) state.bibliotecaOtrosies.push(b); });
         const idsEscr = new Set(state.bibliotecaEscritos.map(t => t.id));
         escritosNuevos.forEach(t => { if (!idsEscr.has(t.id)) state.bibliotecaEscritos.push(t); });
+        const idsPar = new Set(state.bibliotecaParrafos.map(p => p.id));
+        parrafosNuevos.forEach(p => { if (!idsPar.has(p.id)) state.bibliotecaParrafos.push(p); });
       }
       savePlantillas();
       dedupeBibliotecas();
       saveBiblioteca();
       saveBibliotecaEscritos();
+      saveBibliotecaParrafos();
       syncTiposDesdeBiblioteca();
       renderTipoSelector();
       renderPlantillaSelector();
-      showStatus(`Importadas ${plantillasNuevas.length} plantilla(s), ${bibNueva.length} otrosí(es) y ${escritosNuevos.length} plantilla(s) de escrito.`, "ok");
+      renderParrafosBiblioteca();
+      showStatus(`Importadas ${plantillasNuevas.length} plantilla(s), ${bibNueva.length} otrosí(es), ${escritosNuevos.length} plantilla(s) de escrito y ${parrafosNuevos.length} párrafo(s).`, "ok");
     } catch (err) {
       showStatus("Error al importar JSON: " + err.message, "err");
     } finally {
@@ -3207,6 +3336,7 @@ async function init() {
   bindSumaBodyEvents();
   bindPreviewEditEvents();
   bindCamposVariablesEvents();
+  bindParrafosEvents();
   bindOtrosiesEvents();
   bindBibliotecaEvents();
   bindBibliotecaEscritosEvents();
