@@ -318,6 +318,15 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
   <div class="panel">
 
     <h2>Datos del escrito</h2>
+    <div class="field">
+      <label>Modalidad de comparecencia</label>
+      <select id="modalidadComparecencia">
+        <option value="mero-tramite">1. Mero trámite</option>
+        <option value="con-patrocinio-poder">2. Con patrocinio y poder</option>
+        <option value="con-mandato-judicial">3. Con mandato judicial</option>
+        <option value="con-patrocinio-poder-causa-iniciada">4. Con patrocinio y poder (causa ya iniciada)</option>
+      </select>
+    </div>
     <div class="field"><label>Tribunal</label><input type="text" id="tribunal" placeholder="Ej.: PRIMER JUZGADO DE LETRAS DEL TRABAJO DE SANTIAGO"></div>
     <div class="field"><label>Materia</label><input type="text" id="materia" placeholder="Ej.: despido injustificado"></div>
     <div class="field"><label>Carátula <span class="hint">(se mostrará siempre en mayúsculas)</span></label><input type="text" id="caratula" placeholder="Ej.: Pérez con Empresa X S.A."></div>
@@ -328,15 +337,6 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
         <select id="tipoCausa"><option value="RIT">RIT</option><option value="ROL">ROL</option></select>
         <input type="text" id="numeroCausa" placeholder="Ej.: T-123-2026">
       </div>
-    </div>
-    <div class="field">
-      <label>Modalidad de comparecencia</label>
-      <select id="modalidadComparecencia">
-        <option value="mero-tramite">1. Mero trámite</option>
-        <option value="con-patrocinio-poder">2. Con patrocinio y poder</option>
-        <option value="con-mandato-judicial">3. Con mandato judicial</option>
-        <option value="con-patrocinio-poder-causa-iniciada">4. Con patrocinio y poder (causa ya iniciada)</option>
-      </select>
     </div>
     <div id="comparecenciaExtras" style="display:none;">
       <div class="field"><label>Cliente</label><input type="text" id="clienteNombre" placeholder="Ej.: Juan Pérez González"></div>
@@ -2169,8 +2169,13 @@ function renderEncabezadoFields() {
 function applyComparecenciaModeUI() {
   const modo = state.modalidadComparecencia || "mero-tramite";
   const usaPlantilla = (modo === "mero-tramite");
+  const desactivaDatosCausa = (modo === "con-patrocinio-poder" || modo === "con-mandato-judicial");
   const extras = document.getElementById("comparecenciaExtras");
   if (extras) extras.style.display = usaPlantilla ? "none" : "";
+  ["materia","caratula","parte"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = desactivaDatosCausa;
+  });
   ["plantillaSelector","btnGuardarPlantilla","btnDuplicarPlantilla","btnEliminarPlantilla"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = !usaPlantilla;
