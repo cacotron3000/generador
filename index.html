@@ -2185,6 +2185,20 @@ function applyComparecenciaModeUI() {
 }
 
 function renderDelegantes() {
+  const sugeridos = [
+    "Carlos Patricio C. Gorroño Vega",
+    "José Manuel A. Gorroño Vega",
+    "Ignacio Esteban Jara Álvarez"
+  ];
+  const buildSugeridosOptions = (currentName) => {
+    const cur = (currentName || "").trim();
+    const base = [`<option value="">Sugerir abogado…</option>`];
+    sugeridos.forEach(nombre => {
+      const selected = (cur && cur === nombre) ? "selected" : "";
+      base.push(`<option value="${escapeHtml(nombre)}" ${selected}>${escapeHtml(nombre)}</option>`);
+    });
+    return base.join("");
+  };
   const wrap = document.getElementById("delegantesList");
   wrap.innerHTML = "";
   state.delegantes.forEach((p, i) => {
@@ -2196,7 +2210,10 @@ function renderDelegantes() {
         ${state.delegantes.length > 1 ? `<button type="button" class="remove" data-i="${i}" data-kind="delegante">Eliminar</button>` : ""}
       </div>
       <div class="row">
-        <input type="text" class="d-nombre" data-i="${i}" data-kind="delegante" value="${escapeHtml(p.nombre)}" placeholder="Nombre completo">
+        <select class="d-sugerido-abogado" data-i="${i}" data-kind="delegante" title="Seleccione un abogado sugerido (opcional)">
+          ${buildSugeridosOptions(p.nombre)}
+        </select>
+        <input type="text" class="d-nombre" data-i="${i}" data-kind="delegante" value="${escapeHtml(p.nombre)}" placeholder="Nombre completo (editable)">
         <select class="d-genero" data-i="${i}" data-kind="delegante">
           <option value="M" ${p.genero==="M"?"selected":""}>Masculino</option>
           <option value="F" ${p.genero==="F"?"selected":""}>Femenino</option>
@@ -3005,6 +3022,15 @@ function bindDelegantesEvents() {
     });
     wrap.addEventListener("change", e => {
       const el = e.target;
+      if (el.classList.contains("d-sugerido-abogado")) {
+        const kind = el.dataset.kind;
+        const i = parseInt(el.dataset.i, 10);
+        if (kind !== "delegante" || isNaN(i) || !el.value) return;
+        state.delegantes[i].nombre = el.value;
+        renderDelegantes();
+        updatePreview();
+        return;
+      }
       if (!el.classList.contains("d-genero")) return;
       const kind = el.dataset.kind;
       const i = parseInt(el.dataset.i, 10);
