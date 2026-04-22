@@ -1400,7 +1400,7 @@ function tokenToLabel(token) {
 function variableFieldId(sourceId, index) {
   return `${sourceId}::${index}`;
 }
-const PALABRAS_RECURRENTES = [
+const PALABRAS_RECURRENTES_DEFAULT = [
   "DEMANDADO",
   "DEMANDANTE",
   "DEMANDADA",
@@ -1414,8 +1414,32 @@ const PALABRAS_RECURRENTES = [
   "FECHA DE INICIO RELACIÓN LABORAL",
   "FECHA DE TÉRMINO RELACIÓN LABORAL"
 ];
+let PALABRAS_RECURRENTES = [...PALABRAS_RECURRENTES_DEFAULT];
 function normalizeRecurrentWord(s) {
   return String(s || "").replace(/\s+/g, " ").trim().toUpperCase();
+}
+function parsePalabrasRecurrentesTxt(txt) {
+  return String(txt || "")
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean)
+    .filter(l => !/^#/.test(l))
+    .filter(l => !/^PALABRAS\s+RECURRENTES/i.test(l))
+    .map(l => l.replace(/^[\-\*\u2022]\s*/, ""))
+    .map(normalizeRecurrentWord)
+    .filter(Boolean);
+}
+async function loadPalabrasRecurrentes() {
+  try {
+    const resp = await fetch("palabras_recurrentes.txt", { cache: "no-store" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const txt = await resp.text();
+    const parsed = parsePalabrasRecurrentesTxt(txt);
+    PALABRAS_RECURRENTES = parsed.length ? parsed : [...PALABRAS_RECURRENTES_DEFAULT];
+  } catch (err) {
+    PALABRAS_RECURRENTES = [...PALABRAS_RECURRENTES_DEFAULT];
+    console.warn("No se pudo leer palabras_recurrentes.txt, usando lista por defecto.", err);
+  }
 }
 function isTokenRecurrent(token) {
   const inner = tokenToLabel(token);
@@ -3099,7 +3123,8 @@ function bindSyncEvents() {
 }
 
 // =============== INIT ===============
-function init() {
+async function init() {
+  await loadPalabrasRecurrentes();
   loadFromStorage();
   syncTiposDesdeBiblioteca();
   const t = tipoById(state.tipoEscritoId);
