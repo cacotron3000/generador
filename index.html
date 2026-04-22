@@ -1403,6 +1403,54 @@ function bindRichShortcuts(editor, onChange) {
     if (k === "u") { e.preventDefault(); document.execCommand("underline"); onChange && onChange(); }
   });
 }
+function sanitizePastedHtml(html) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = String(html || "");
+  function wrapIf(flag, open, close, content) {
+    return flag ? (open + content + close) : content;
+  }
+  function walk(node) {
+    if (!node) return "";
+    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.textContent || "");
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+    const tag = node.tagName.toLowerCase();
+    const children = Array.from(node.childNodes).map(walk).join("");
+    if (tag === "br") return "<br>";
+    if (tag === "strong" || tag === "b") return "<strong>" + children + "</strong>";
+    if (tag === "em" || tag === "i") return "<em>" + children + "</em>";
+    if (tag === "u") return "<u>" + children + "</u>";
+    if (tag === "p" || tag === "div") return "<div>" + children + "</div>";
+    if (tag === "span") {
+      const cls = (node.getAttribute("class") || "").toLowerCase();
+      const style = (node.getAttribute("style") || "").toLowerCase();
+      const isBold = /\bbold\b/.test(cls) || /font-weight\s*:\s*(bold|[6-9]00)/.test(style);
+      const isItalic = /\bitalic\b/.test(cls) || /font-style\s*:\s*italic/.test(style);
+      const isUnderline = /\buline\b/.test(cls) || /text-decoration[^;]*underline/.test(style);
+      let out = children;
+      out = wrapIf(isBold, "<strong>", "</strong>", out);
+      out = wrapIf(isItalic, "<em>", "</em>", out);
+      out = wrapIf(isUnderline, "<u>", "</u>", out);
+      return out;
+    }
+    // Cualquier otra etiqueta se "aplana": conserva solo el texto/descendientes permitidos.
+    return children;
+  }
+  return Array.from(tmp.childNodes).map(walk).join("");
+}
+function bindRichPaste(editor, onChange) {
+  if (!editor) return;
+  editor.addEventListener("paste", e => {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const html = cd.getData("text/html");
+    const text = cd.getData("text/plain");
+    if (!html && !text) return;
+    e.preventDefault();
+    const sanitized = html ? sanitizePastedHtml(html) : escapeHtml(text).replace(/\n/g, "<br>");
+    document.execCommand("insertHTML", false, sanitized);
+    onChange && onChange();
+  });
+}
 function joinNames(arr) {
   if (arr.length === 0) return "";
   if (arr.length === 1) return arr[0];
@@ -2107,6 +2155,11 @@ function bindSumaBodyEvents() {
     state.cuerpoCustom = true;
     updatePreview();
   });
+  bindRichPaste(cuerpoEditor, () => {
+    state.cuerpoPrincipal = cuerpoEditor.innerHTML;
+    state.cuerpoCustom = true;
+    updatePreview();
+  });
   document.getElementById("petitorio").addEventListener("input", e => {
     state.petitorio = e.target.value;
     state.petitorioCustom = e.target.value.length > 0;
@@ -2219,6 +2272,12 @@ function bindOtrosiesEvents() {
     if (el.dataset.shortcutsBound === "1") return;
     el.dataset.shortcutsBound = "1";
     bindRichShortcuts(el, () => {
+      const i = parseInt(el.dataset.i, 10);
+      if (isNaN(i)) return;
+      state.otrosies[i].contenido = el.innerHTML;
+      updatePreview();
+    });
+    bindRichPaste(el, () => {
       const i = parseInt(el.dataset.i, 10);
       if (isNaN(i)) return;
       state.otrosies[i].contenido = el.innerHTML;
