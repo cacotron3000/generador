@@ -704,9 +704,12 @@ function parseInlineToRuns(html) {
         const isBoldSpan  = /class\s*=\s*["'][^"']*\bbold\b[^"']*["']/i.test(attrs);
         const isUSpan     = /class\s*=\s*["'][^"']*\buline\b[^"']*["']/i.test(attrs);
         const isItalSpan  = /class\s*=\s*["'][^"']*\b(italic|italica|italica|em)\b[^"']*["']/i.test(attrs);
-        if (isBoldSpan)      { counts.bold++; spanStack.push("bold"); }
-        else if (isItalSpan) { counts.italic++; spanStack.push("italic"); }
-        else if (isUSpan)    { counts.underline++; spanStack.push("uline"); }
+        const isBoldStyle = /style\s*=\s*["'][^"']*font-weight\s*:\s*(bold|[6-9]00)[^"']*["']/i.test(attrs);
+        const isItalStyle = /style\s*=\s*["'][^"']*font-style\s*:\s*italic[^"']*["']/i.test(attrs);
+        const isUStyle    = /style\s*=\s*["'][^"']*text-decoration[^"']*underline[^"']*["']/i.test(attrs);
+        if (isBoldSpan || isBoldStyle)      { counts.bold++; spanStack.push("bold"); }
+        else if (isItalSpan || isItalStyle) { counts.italic++; spanStack.push("italic"); }
+        else if (isUSpan || isUStyle)       { counts.underline++; spanStack.push("uline"); }
         else                 { spanStack.push(null); }
       }
       continue;
