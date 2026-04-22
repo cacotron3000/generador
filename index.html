@@ -406,14 +406,14 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <button class="close" id="syncModalClose" title="Cerrar">×</button>
     <h3>Sincronización con servidor</h3>
     <p style="color: var(--muted); font-size: 13px; margin-top: 0;">
-      Las plantillas de causa y los otrosíes de biblioteca se guardarán en tu servidor (cPanel) y estarán disponibles en cualquier equipo con acceso.
+      Las plantillas de causa, los otrosíes y las plantillas de escrito se guardarán en tu servidor (cPanel) y estarán disponibles en cualquier equipo con acceso.
       Mientras no haya conexión, los cambios se guardan localmente y se sincronizan automáticamente al recuperarla.
     </p>
 
     <div class="field">
       <label>URL base de la API</label>
       <input type="text" id="syncApiUrl" placeholder="https://tudominio.cl/generador/api">
-      <span class="hint" style="text-transform:none; letter-spacing:0;">Sin barra final. Debe apuntar a la carpeta que contiene plantillas.php y otrosies.php.</span>
+      <span class="hint" style="text-transform:none; letter-spacing:0;">Sin barra final. Debe apuntar a la carpeta que contiene plantillas.php, otrosies.php y escritos.php.</span>
     </div>
     <div class="field">
       <label>Token de acceso</label>
@@ -1031,6 +1031,28 @@ const Sync = (() => {
     enqueue({ kind: "otrosi", op: "delete", uuid, ts: new Date().toISOString() });
     scheduleFlush();
   }
+  function onEscritoUpsert(t) {
+    if (!isConfigured()) return;
+    enqueue({
+      kind: "escrito", op: "upsert",
+      uuid: t.id,
+      payload: {
+        uuid: t.id,
+        nombre: t.nombre,
+        sumaPorDefecto: t.sumaPorDefecto || "",
+        cuerpoPorDefecto: t.cuerpoPorDefecto || "",
+        petitorioPorDefecto: t.petitorioPorDefecto || "",
+        usaDelegados: !!t.usaDelegados
+      },
+      ts: new Date().toISOString()
+    });
+    scheduleFlush();
+  }
+  function onEscritoDelete(uuid) {
+    if (!isConfigured()) return;
+    enqueue({ kind: "escrito", op: "delete", uuid, ts: new Date().toISOString() });
+    scheduleFlush();
+  }
 
   // ----- Flush (push) -----
   let flushTimer = null;
@@ -1047,7 +1069,10 @@ const Sync = (() => {
     let sent = 0;
     for (const op of q) {
       try {
-        const path = op.kind === "plantilla" ? "/plantillas.php" : "/otrosies.php";
+        const path =
+          op.kind === "plantilla" ? "/plantillas.php" :
+          op.kind === "otrosi" ? "/otrosies.php" :
+          "/escritos.php";
         if (op.op === "upsert") {
           await apiFetch(path, { method: "POST", body: op.payload });
         } else if (op.op === "delete") {
@@ -1080,6 +1105,7 @@ const Sync = (() => {
 
     let plantillasChanged = 0;
     let otrosiesChanged = 0;
+    let escritosChanged = 0;
 
     // Plantillas
     const pl = await apiFetch("/plantillas.php?since=" + encodeURIComponent(since));
@@ -1145,17 +1171,57 @@ const Sync = (() => {
     });
     if (otrosiesChanged) saveBiblioteca();
 
-    const pulledAt = (pl.server_time || ot.server_time || new Date().toISOString());
+    // Plantillas de escrito
+    const es = await apiFetch("/escritos.php?since=" + encodeURIComponent(since));
+    const eByIdLocal = new Map(state.bibliotecaEscritos.map(t => [t.id, t]));
+    (es.escritos || []).forEach(srv => {
+      if (srv.eliminadoEn) {
+        const before = state.bibliotecaEscritos.length;
+        state.bibliotecaEscritos = state.bibliotecaEscritos.filter(t => t.id !== srv.uuid);
+        if (state.bibliotecaEscritos.length !== before) escritosChanged++;
+      } else {
+        const local = eByIdLocal.get(srv.uuid);
+        const srvTs = Date.parse(srv.actualizadoEn || 0);
+        const locTs = local ? Date.parse(local.actualizadoEn || 0) : 0;
+        if (!local || srvTs > locTs) {
+          const merged = {
+            id: srv.uuid,
+            nombre: srv.nombre,
+            sumaPorDefecto: srv.sumaPorDefecto || "",
+            cuerpoPorDefecto: srv.cuerpoPorDefecto || "",
+            petitorioPorDefecto: srv.petitorioPorDefecto || "",
+            usaDelegados: !!srv.usaDelegados,
+            creadoEn: srv.creadoEn,
+            actualizadoEn: srv.actualizadoEn
+          };
+          if (local) Object.assign(local, merged);
+          else state.bibliotecaEscritos.push(merged);
+          escritosChanged++;
+        }
+      }
+    });
+    if (escritosChanged) {
+      saveBibliotecaEscritos();
+      syncTiposDesdeBiblioteca();
+    }
+
+    const pulledAt = (pl.server_time || ot.server_time || es.server_time || new Date().toISOString());
     setState({ lastPullAt: pulledAt, lastError: null });
     notifyStatus();
-    const changed = (plantillasChanged + otrosiesChanged) > 0;
+    const changed = (plantillasChanged + otrosiesChanged + escritosChanged) > 0;
     if (changed) {
       try {
-        const ev = new CustomEvent("sync-pulled", { detail: { plantillas: plantillasChanged, otrosies: otrosiesChanged } });
+        const ev = new CustomEvent("sync-pulled", { detail: { plantillas: plantillasChanged, otrosies: otrosiesChanged, escritos: escritosChanged } });
         window.dispatchEvent(ev);
       } catch (e) { /* noop */ }
     }
-    return { pulled: (pl.plantillas || []).length + (ot.otrosies || []).length, changed, plantillasChanged, otrosiesChanged };
+    return {
+      pulled: (pl.plantillas || []).length + (ot.otrosies || []).length + (es.escritos || []).length,
+      changed,
+      plantillasChanged,
+      otrosiesChanged,
+      escritosChanged
+    };
   }
 
   async function syncNow() {
@@ -1213,6 +1279,7 @@ const Sync = (() => {
     getPending, getState, getStatusSummary,
     onPlantillaUpsert, onPlantillaDelete,
     onOtrosiUpsert, onOtrosiDelete,
+    onEscritoUpsert, onEscritoDelete,
     flush, pull, syncNow, testConnection,
     startAuto, stopAuto, notifyStatus
   };
@@ -1614,12 +1681,11 @@ function renderAll() {
 
 function renderTipoSelector() {
   const sel = document.getElementById("tipoEscrito");
-  if (sel.options.length === 0) {
-    for (const t of TIPOS) {
-      const opt = document.createElement("option");
-      opt.value = t.id; opt.textContent = t.nombre;
-      sel.appendChild(opt);
-    }
+  sel.innerHTML = "";
+  for (const t of TIPOS) {
+    const opt = document.createElement("option");
+    opt.value = t.id; opt.textContent = t.nombre;
+    sel.appendChild(opt);
   }
   sel.value = state.tipoEscritoId;
   // Ajustar visibilidad de delegados, textarea de cuerpo
@@ -2350,6 +2416,7 @@ function guardarTipoEscritoActual() {
   };
   state.bibliotecaEscritos.push(nuevo);
   saveBibliotecaEscritos();
+  Sync.onEscritoUpsert(nuevo);
   syncTiposDesdeBiblioteca();
   state.tipoEscritoId = nuevo.id;
   renderTipoSelector();
@@ -2383,6 +2450,7 @@ function bindBibliotecaEscritosEvents() {
       if (!window.confirm(`¿Eliminar plantilla de escrito «${item.nombre}»?`)) return;
       state.bibliotecaEscritos.splice(i, 1);
       saveBibliotecaEscritos();
+      Sync.onEscritoDelete(item.id);
       syncTiposDesdeBiblioteca();
       renderTipoSelector();
       renderBibliotecaEscritos();
@@ -2637,11 +2705,14 @@ function init() {
       if (sel.value !== seleccionadaActual) sel.value = ""; // la plantilla ya no existe
     }
     renderBiblioteca();
+    renderTipoSelector();
+    renderBibliotecaEscritos();
     updatePreview();
     const det = (ev && ev.detail) || {};
     const partes = [];
     if (det.plantillas) partes.push(det.plantillas + " plantilla" + (det.plantillas===1?"":"s"));
     if (det.otrosies)   partes.push(det.otrosies + " otrosí" + (det.otrosies===1?"":"es"));
+    if (det.escritos)   partes.push(det.escritos + " plantilla" + (det.escritos===1?"":"s") + " de escrito");
     if (partes.length) showStatus("Cambios recibidos del servidor: " + partes.join(" y ") + ".", "ok");
   });
 
