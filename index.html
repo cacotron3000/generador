@@ -258,6 +258,25 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 .lib-item .actions-row { margin-top: 8px; display: flex; gap: 6px; }
 
 .format-bar { display:flex; gap:6px; flex-wrap:wrap; margin: 6px 0; }
+.rich-editor {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  min-height: 120px;
+  font-family: inherit;
+  font-size: 13px;
+  background: #fff;
+}
+.rich-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.15);
+}
+.rich-editor:empty:before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+}
 </style>
 </head>
 <body>
@@ -331,7 +350,8 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       <button type="button" class="btn small" data-cmd="linebreak">↵</button>
     </div>
     <div id="cuerpoTextareaWrap">
-      <textarea id="cuerpoPrincipal" rows="8" class="prose" placeholder="Redacte el cuerpo del escrito…"></textarea>
+      <div id="cuerpoPrincipalEditor" class="rich-editor prose" contenteditable="true" data-placeholder="Redacte el cuerpo del escrito…"></div>
+      <textarea id="cuerpoPrincipal" rows="8" class="prose" style="display:none;"></textarea>
     </div>
     <div id="cuerpoNotaEstructurado" style="display:none; color: var(--muted); font-size: 12px;">
       El cuerpo de este tipo de escrito se genera automáticamente desde los campos anteriores.
@@ -1355,24 +1375,25 @@ function escapeHtml(s) {
 function nl2br(s) { return escapeHtml(s).replace(/\n/g,"<br/>"); }
 function rich2br(s) { return String(s||"").replace(/\n/g,"<br/>"); }
 function safeTextarea(s) { return String(s||"").replace(/<\/textarea/gi, "&lt;/textarea"); }
-function wrapTextareaSelection(ta, before, after) {
-  ta.focus();
-  const start = ta.selectionStart || 0;
-  const end = ta.selectionEnd || 0;
-  const val = ta.value || "";
-  const selected = val.slice(start, end);
-  ta.value = val.slice(0, start) + before + selected + after + val.slice(end);
-  const pos = start + before.length + selected.length + after.length;
-  ta.selectionStart = ta.selectionEnd = pos;
-  ta.dispatchEvent(new Event("input", { bubbles: true }));
+function applyFormatToEditor(editor, cmd) {
+  if (!editor) return;
+  editor.focus();
+  if (cmd === "bold") return document.execCommand("bold");
+  if (cmd === "italic") return document.execCommand("italic");
+  if (cmd === "underline") return document.execCommand("underline");
+  if (cmd === "indent") return document.execCommand("indent");
+  if (cmd === "linebreak") return document.execCommand("insertLineBreak");
 }
-function applyFormatToTextarea(ta, cmd) {
-  if (!ta) return;
-  if (cmd === "bold") return wrapTextareaSelection(ta, "<strong>", "</strong>");
-  if (cmd === "italic") return wrapTextareaSelection(ta, "<em>", "</em>");
-  if (cmd === "underline") return wrapTextareaSelection(ta, "<u>", "</u>");
-  if (cmd === "indent") return wrapTextareaSelection(ta, '<p class="indent">', "</p>");
-  if (cmd === "linebreak") return wrapTextareaSelection(ta, "<br>", "");
+function bindRichShortcuts(editor, onChange) {
+  if (!editor) return;
+  editor.addEventListener("keydown", e => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod) return;
+    const k = String(e.key || "").toLowerCase();
+    if (k === "b") { e.preventDefault(); document.execCommand("bold"); onChange && onChange(); }
+    if (k === "i") { e.preventDefault(); document.execCommand("italic"); onChange && onChange(); }
+    if (k === "u") { e.preventDefault(); document.execCommand("underline"); onChange && onChange(); }
+  });
 }
 function joinNames(arr) {
   if (arr.length === 0) return "";
@@ -1829,10 +1850,13 @@ function renderSumaBody() {
   setVal("petitorio", state.petitorio);
   const tipo = tipoById(state.tipoEscritoId);
   const ta = document.getElementById("cuerpoPrincipal");
+  const ed = document.getElementById("cuerpoPrincipalEditor");
   if (tipo.estructurado) {
-    ta.value = ""; // no se usa
+    ta.value = "";
+    ed.innerHTML = "";
   } else {
     ta.value = state.cuerpoPrincipal;
+    ed.innerHTML = state.cuerpoPrincipal || "";
   }
 }
 
@@ -1863,7 +1887,7 @@ function renderOtrosies() {
           <button type="button" class="btn small" data-format-otrosi="indent" data-i="${i}">Sangría</button>
           <button type="button" class="btn small" data-format-otrosi="linebreak" data-i="${i}">↵</button>
         </div>
-        <textarea class="o-contenido prose" data-i="${i}" rows="3" placeholder="Contenido del otrosí…">${safeTextarea(o.contenido)}</textarea>
+        <div class="o-contenido-editor rich-editor prose" style="min-height:90px;" contenteditable="true" data-i="${i}" data-placeholder="Contenido del otrosí…">${o.contenido||""}</div>
       </div>`;
     wrap.appendChild(card);
   });
@@ -1926,7 +1950,7 @@ function updatePreview() {
   document.getElementById("pv_otrosies").innerHTML = buildOtrosiesHtml();
 
   // Placeholder del textarea refleja el tipo
-  document.getElementById("cuerpoPrincipal").placeholder = tipo.estructurado ? "" : "Redacte el cuerpo del escrito…";
+  document.getElementById("cuerpoPrincipalEditor").setAttribute("data-placeholder", tipo.estructurado ? "" : "Redacte el cuerpo del escrito…");
   document.getElementById("sumaPrincipal").placeholder = tipo.sumaPorDefecto || "Ej.: Solicita lo que indica";
   document.getElementById("petitorio").placeholder = tipo.petitorioPorDefecto(state);
   updateGuardarPlantillaUI();
@@ -2064,8 +2088,14 @@ function bindSumaBodyEvents() {
     state.sumaCustom = e.target.value.length > 0;
     updatePreview();
   });
-  document.getElementById("cuerpoPrincipal").addEventListener("input", e => {
-    state.cuerpoPrincipal = e.target.value;
+  const cuerpoEditor = document.getElementById("cuerpoPrincipalEditor");
+  cuerpoEditor.addEventListener("input", e => {
+    state.cuerpoPrincipal = e.target.innerHTML;
+    state.cuerpoCustom = true;
+    updatePreview();
+  });
+  bindRichShortcuts(cuerpoEditor, () => {
+    state.cuerpoPrincipal = cuerpoEditor.innerHTML;
     state.cuerpoCustom = true;
     updatePreview();
   });
@@ -2090,7 +2120,10 @@ function bindSumaBodyEvents() {
   document.getElementById("cuerpoFormatBar").addEventListener("click", e => {
     const btn = e.target.closest("button[data-cmd]");
     if (!btn) return;
-    applyFormatToTextarea(document.getElementById("cuerpoPrincipal"), btn.dataset.cmd);
+    applyFormatToEditor(cuerpoEditor, btn.dataset.cmd);
+    state.cuerpoPrincipal = cuerpoEditor.innerHTML;
+    state.cuerpoCustom = true;
+    updatePreview();
   });
 }
 
@@ -2169,8 +2202,20 @@ function bindOtrosiesEvents() {
     const i = parseInt(el.dataset.i, 10);
     if (isNaN(i)) return;
     if (el.classList.contains("o-titulo")) state.otrosies[i].titulo = el.value;
-    if (el.classList.contains("o-contenido")) state.otrosies[i].contenido = el.value;
+    if (el.classList.contains("o-contenido-editor")) state.otrosies[i].contenido = el.innerHTML;
     updatePreview();
+  });
+  wrap.addEventListener("focusin", e => {
+    const el = e.target;
+    if (!el.classList.contains("o-contenido-editor")) return;
+    if (el.dataset.shortcutsBound === "1") return;
+    el.dataset.shortcutsBound = "1";
+    bindRichShortcuts(el, () => {
+      const i = parseInt(el.dataset.i, 10);
+      if (isNaN(i)) return;
+      state.otrosies[i].contenido = el.innerHTML;
+      updatePreview();
+    });
   });
   wrap.addEventListener("click", e => {
     const el = e.target;
@@ -2207,8 +2252,12 @@ function bindOtrosiesEvents() {
     }
     if (el.dataset.formatOtrosi != null) {
       const i = parseInt(el.dataset.i, 10);
-      const ta = wrap.querySelector(`textarea.o-contenido[data-i="${i}"]`);
-      applyFormatToTextarea(ta, el.dataset.formatOtrosi);
+      const ed = wrap.querySelector(`.o-contenido-editor[data-i="${i}"]`);
+      applyFormatToEditor(ed, el.dataset.formatOtrosi);
+      if (ed && !isNaN(i)) {
+        state.otrosies[i].contenido = ed.innerHTML;
+        updatePreview();
+      }
       return;
     }
   });
