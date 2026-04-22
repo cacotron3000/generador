@@ -1554,7 +1554,7 @@ const state = {
   bibliotecaEscritos: [],
 
   // campos actuales
-  tipoEscritoId: "delega-poder",
+  tipoEscritoId: "generico",
   tribunal: "",
   materia: "",
   caratula: "",
@@ -1605,7 +1605,7 @@ function syncTiposDesdeBiblioteca() {
   }
   state.bibliotecaEscritos.forEach(item => TIPOS.push(buildTipoDesdeBiblioteca(item)));
   if (!TIPOS.some(t => t.id === state.tipoEscritoId)) {
-    state.tipoEscritoId = TIPOS[0].id;
+    state.tipoEscritoId = TIPOS.some(t => t.id === "generico") ? "generico" : TIPOS[0].id;
   }
 }
 
