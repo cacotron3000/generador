@@ -362,13 +362,13 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       El cuerpo de este tipo de escrito se genera automáticamente desde los campos anteriores.
     </div>
 
+    <h2 class="spaced" id="camposVarsTitle" style="display:none;">Campos variables detectados</h2>
+    <div id="camposVariablesWrap"></div>
+
     <h2 class="spaced">Petitorio (va después de «PIDO A S.S.»)</h2>
     <div class="field">
       <input type="text" id="petitorio" placeholder="Ej.: tener presente la delegación de poder.">
     </div>
-
-    <h2 class="spaced" id="camposVarsTitle" style="display:none;">Campos variables detectados</h2>
-    <div id="camposVariablesWrap"></div>
 
     <div class="actions" style="margin-top:10px;">
       <button type="button" class="btn small" id="btnGuardarTipoEscrito">Guardar plantilla de escrito</button>
@@ -772,10 +772,10 @@ function buildDocxComparecenciaRuns() {
   }
   const profesion = pl ? (g === "F" ? "abogadas" : "abogados") : (g === "F" ? "abogada" : "abogado");
   const parte     = (state.parte||"").trim() || "demandada";
-  const materia   = applyVariablesToText((state.materia||"").trim() || "[MATERIA]");
-  const caratula  = applyVariablesToText(((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase());
+  const materia   = applyVariablesToText((state.materia||"").trim() || "[MATERIA]", "comparecencia");
+  const caratula  = applyVariablesToText(((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase(), "comparecencia");
   const tipo      = state.tipoCausa;
-  const numero    = applyVariablesToText((state.numeroCausa||"").trim() || "[NÚMERO]");
+  const numero    = applyVariablesToText((state.numeroCausa||"").trim() || "[NÚMERO]", "comparecencia");
   const digo      = d.digo;
   runs.push({ text: `, ${profesion}, por la parte ${parte}, en autos sobre ${materia}, caratulada ` });
   runs.push({ text: "\u201C" + caratula + "\u201D", bold: true });
@@ -791,12 +791,12 @@ function buildDocxCuerpoParas() {
   const tipo = tipoById(state.tipoEscritoId);
   if (tipo.estructurado) {
     // Para tipos estructurados: preservar negrita/cursiva/subrayado del HTML original.
-    const html = applyVariablesToHtml(tipo.generarCuerpoHtml(state));
+    const html = applyVariablesToHtml(tipo.generarCuerpoHtml(state), "cuerpo");
     const paragraphs = htmlToDocxParagraphs(html);
     return paragraphs.map(runs => dxP(dxRuns(runs), { align: "both", indent: 720 }));
   }
   // Tipos libres: el textarea contiene solo texto plano; separamos por líneas en blanco.
-  const html = applyVariablesToHtml(state.cuerpoPrincipal || "");
+  const html = applyVariablesToHtml(state.cuerpoPrincipal || "", "cuerpo");
   const paragraphs = htmlToDocxParagraphs(html);
   return paragraphs.map(runs => dxP(dxRuns(runs), { align: "both", indent: 720 }));
 }
@@ -820,16 +820,16 @@ function buildDocxDocument() {
   paras.push(dxP(dxRuns([{ text: "POR TANTO,", bold: true }]), { align: "both", indent: 720 }));
   const tipo = tipoById(state.tipoEscritoId);
   const pet  = (state.petitorio || tipo.petitorioPorDefecto(state) || "").trim();
-  const petRuns = htmlToDocxParagraphs(applyVariablesToHtml(escapeHtml(pet)))[0] || [{ text: pet }];
+  const petRuns = htmlToDocxParagraphs(applyVariablesToHtml(escapeHtml(pet), "petitorio"))[0] || [{ text: pet }];
   paras.push(dxP(dxRuns([{ text: "PIDO A S.S. ", bold: true }, ...petRuns]), { align: "both", indent: 720 }));
   // OTROSÍES
   state.otrosies.forEach((o, i) => {
     paras.push(dxP(""));
-    const parsed = htmlToDocxParagraphs(applyVariablesToHtml(o.contenido || ""));
+    const parsed = htmlToDocxParagraphs(applyVariablesToHtml(o.contenido || "", `otrosiContenido:${i}`));
     if (!parsed.length) parsed.push([{ text: "" }]);
     const firstRuns = [
       { text: ordinalOtrosi(i+1) + ": ", bold: true },
-      { text: applyVariablesToText((o.titulo||"").trim() || "[TÍTULO]") + ". ", bold: true },
+      { text: applyVariablesToText((o.titulo||"").trim() || "[TÍTULO]", `otrosiTitulo:${i}`) + ". ", bold: true },
       ...parsed[0]
     ];
     paras.push(dxP(dxRuns(firstRuns), { align: "both", indent: 720 }));
@@ -1380,14 +1380,13 @@ function rich2br(s) { return String(s||"").replace(/\n/g,"<br/>"); }
 function safeTextarea(s) { return String(s||"").replace(/<\/textarea/gi, "&lt;/textarea"); }
 function extractBracketTokens(s) {
   const out = [];
-  const seen = new Set();
   const re = /\[[^\]\r\n]+\]/g;
   const txt = String(s || "");
   let m;
   while ((m = re.exec(txt)) !== null) {
     const tok = m[0].trim();
-    if (!tok || seen.has(tok)) continue;
-    seen.add(tok);
+    if (!tok) continue;
+    if (tok.toUpperCase() === "[PETITORIO]") continue;
     out.push(tok);
   }
   return out;
@@ -1398,22 +1397,31 @@ function stripHtml(s) {
 function tokenToLabel(token) {
   return token.replace(/^\[|\]$/g, "");
 }
-function applyVariablesToHtml(html) {
+function variableFieldId(sourceId, index) {
+  return `${sourceId}::${index}`;
+}
+function applyVariablesToHtml(html, sourceId) {
   let out = String(html || "");
-  Object.entries(state.camposVariables || {}).forEach(([token, value]) => {
-    if (!token || !out.includes(token)) return;
-    const richValue = String(value || "");
-    out = out.split(token).join(richValue || token);
+  let i = 0;
+  out = out.replace(/\[[^\]\r\n]+\]/g, (tok) => {
+    i++;
+    if (tok.toUpperCase() === "[PETITORIO]") return tok;
+    const id = variableFieldId(sourceId || "global", i);
+    const richValue = String((state.camposVariables || {})[id] || "");
+    return richValue || tok;
   });
   return out;
 }
-function applyVariablesToText(text) {
+function applyVariablesToText(text, sourceId) {
   let out = String(text || "");
-  Object.entries(state.camposVariables || {}).forEach(([token, value]) => {
-    if (!token || !out.includes(token)) return;
-    const richValue = String(value || "");
-    const replacement = richValue ? stripHtml(richValue).replace(/\s+/g, " ").trim() : token;
-    out = out.split(token).join(replacement);
+  let i = 0;
+  out = out.replace(/\[[^\]\r\n]+\]/g, (tok) => {
+    i++;
+    if (tok.toUpperCase() === "[PETITORIO]") return tok;
+    const id = variableFieldId(sourceId || "global", i);
+    const richValue = String((state.camposVariables || {})[id] || "");
+    const replacement = richValue ? stripHtml(richValue).replace(/\s+/g, " ").trim() : tok;
+    return replacement;
   });
   return out;
 }
@@ -2015,68 +2023,74 @@ function renderOtrosies() {
 
 function detectTokensActuales() {
   const tipo = tipoById(state.tipoEscritoId);
-  const fuentes = [
-    state.sumaPrincipal || tipo.sumaPorDefecto || "",
-    state.petitorio || tipo.petitorioPorDefecto(state) || "",
-    tipo.estructurado
-      ? String(tipo.generarCuerpoHtml(state) || "")
-      : String(state.cuerpoPrincipal || "")
+  const sources = [
+    { id: "suma", text: state.sumaPrincipal || tipo.sumaPorDefecto || "" },
+    { id: "comparecencia", text: `${state.materia||""} ${state.caratula||""} ${state.numeroCausa||""}` },
+    { id: "cuerpo", text: tipo.estructurado ? String(tipo.generarCuerpoHtml(state) || "") : String(state.cuerpoPrincipal || "") },
+    { id: "petitorio", text: state.petitorio || tipo.petitorioPorDefecto(state) || "" }
   ];
-  state.otrosies.forEach(o => {
-    fuentes.push(o.titulo || "");
-    fuentes.push(o.contenido || "");
+  state.otrosies.forEach((o, i) => {
+    sources.push({ id: `otrosiTitulo:${i}`, text: o.titulo || "" });
+    sources.push({ id: `otrosiContenido:${i}`, text: o.contenido || "" });
   });
-  const tokens = [];
-  const seen = new Set();
-  fuentes.forEach(f => {
-    extractBracketTokens(stripHtml(f)).forEach(tok => {
-      if (seen.has(tok)) return;
-      seen.add(tok);
-      tokens.push(tok);
+
+  const occurrences = [];
+  const tokenCounts = {};
+  sources.forEach(src => {
+    const matches = extractBracketTokens(stripHtml(src.text));
+    matches.forEach((tok, idx) => {
+      tokenCounts[tok] = (tokenCounts[tok] || 0) + 1;
+      occurrences.push({
+        id: variableFieldId(src.id, idx + 1),
+        sourceId: src.id,
+        token: tok,
+        serial: tokenCounts[tok]
+      });
     });
   });
-  return tokens;
+  return occurrences;
 }
 
 function renderCamposVariables() {
-  const tokens = detectTokensActuales();
+  const occurrences = detectTokensActuales();
   const title = document.getElementById("camposVarsTitle");
   const wrap = document.getElementById("camposVariablesWrap");
   if (!title || !wrap) return;
 
   const next = {};
-  tokens.forEach(tok => { next[tok] = state.camposVariables[tok] || ""; });
+  occurrences.forEach(o => { next[o.id] = state.camposVariables[o.id] || ""; });
   state.camposVariables = next;
 
-  title.style.display = tokens.length ? "" : "none";
+  title.style.display = occurrences.length ? "" : "none";
   wrap.innerHTML = "";
-  if (!tokens.length) return;
+  if (!occurrences.length) return;
 
-  tokens.forEach(tok => {
-    const value = state.camposVariables[tok] || "";
+  occurrences.forEach(o => {
+    const value = state.camposVariables[o.id] || "";
+    const label = `${tokenToLabel(o.token)} ${o.serial}`;
     const card = document.createElement("div");
     card.className = "field";
     card.style.marginBottom = "8px";
     card.innerHTML = `
-      <label>${escapeHtml(tokenToLabel(tok))}</label>
+      <label>${escapeHtml(label)}</label>
       <div class="format-bar">
-        <button type="button" class="btn small" data-format-campo="bold" data-token="${escapeHtml(tok)}"><b>N</b></button>
-        <button type="button" class="btn small" data-format-campo="italic" data-token="${escapeHtml(tok)}"><i>I</i></button>
-        <button type="button" class="btn small" data-format-campo="underline" data-token="${escapeHtml(tok)}"><u>S</u></button>
-        <button type="button" class="btn small" data-format-campo="indent" data-token="${escapeHtml(tok)}">Sangría</button>
-        <button type="button" class="btn small" data-format-campo="linebreak" data-token="${escapeHtml(tok)}">↵</button>
+        <button type="button" class="btn small" data-format-campo="bold" data-var-id="${escapeHtml(o.id)}"><b>N</b></button>
+        <button type="button" class="btn small" data-format-campo="italic" data-var-id="${escapeHtml(o.id)}"><i>I</i></button>
+        <button type="button" class="btn small" data-format-campo="underline" data-var-id="${escapeHtml(o.id)}"><u>S</u></button>
+        <button type="button" class="btn small" data-format-campo="indent" data-var-id="${escapeHtml(o.id)}">Sangría</button>
+        <button type="button" class="btn small" data-format-campo="linebreak" data-var-id="${escapeHtml(o.id)}">↵</button>
       </div>
-      <div class="o-contenido-editor rich-editor prose campo-var-editor" style="min-height:70px;" contenteditable="true" data-token="${escapeHtml(tok)}" data-placeholder="Valor para ${escapeHtml(tok)}…">${value}</div>
+      <div class="o-contenido-editor rich-editor prose campo-var-editor" style="min-height:70px;" contenteditable="true" data-var-id="${escapeHtml(o.id)}" data-placeholder="Valor para ${escapeHtml(o.token)}…">${value}</div>
     `;
     wrap.appendChild(card);
   });
 }
 function ensureCamposVariablesRendered() {
-  const a = detectTokensActuales();
+  const a = detectTokensActuales().map(x => x.id);
   const b = Object.keys(state.camposVariables || {});
-  if (a.length !== b.length) return renderCamposVariables();
+  if (a.length !== b.length) { renderCamposVariables(); return; }
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return renderCamposVariables();
+    if (a[i] !== b[i]) { renderCamposVariables(); return; }
   }
 }
 
@@ -2086,13 +2100,13 @@ function buildSumaLineHtml() {
   const principal = (state.sumaPrincipal || tipo.sumaPorDefecto || "Asunto principal").trim();
   // Si no hay otrosíes: sin "EN LO PRINCIPAL"; título en MAYÚSCULAS, negrita y subrayado.
   if (!state.otrosies || state.otrosies.length === 0) {
-    return applyVariablesToHtml(`<span class="bold uline" style="font-weight:bold; text-decoration:underline;">${escapeHtml(principal.toUpperCase())}</span>.`);
+    return applyVariablesToHtml(`<span class="bold uline" style="font-weight:bold; text-decoration:underline;">${escapeHtml(principal.toUpperCase())}</span>.`, "suma");
   }
   const partes = [ `<span class="bold" style="font-weight:bold;">EN LO PRINCIPAL:</span> ${escapeHtml(principal)}` ];
   state.otrosies.forEach((o, i) => {
     partes.push(`<span class="bold" style="font-weight:bold;">${ordinalOtrosi(i+1)}:</span> ${escapeHtml((o.titulo||"").trim() || "[título del otrosí]")}`);
   });
-  return applyVariablesToHtml(partes.join("; ") + ".");
+  return applyVariablesToHtml(partes.join("; ") + ".", "suma");
 }
 
 function buildComparecenciaHtml() {
@@ -2102,27 +2116,27 @@ function buildComparecenciaHtml() {
   const tipo     = escapeHtml(state.tipoCausa);
   const numero   = escapeHtml((state.numeroCausa||"").trim() || "[NÚMERO]");
   const parte    = escapeHtml((state.parte||"").trim() || "demandada");
-  return applyVariablesToHtml(`${d.nombresHtml}, ${d.profesion}, por la parte ${parte}, en autos sobre ${materia}, caratulada <span class="bold">&ldquo;${caratula}&rdquo;</span>, Causa <span class="bold">${tipo}</span> <span class="bold">${numero}</span>, a S.S., respetuosamente, ${d.digo}:`);
+  return applyVariablesToHtml(`${d.nombresHtml}, ${d.profesion}, por la parte ${parte}, en autos sobre ${materia}, caratulada <span class="bold">&ldquo;${caratula}&rdquo;</span>, Causa <span class="bold">${tipo}</span> <span class="bold">${numero}</span>, a S.S., respetuosamente, ${d.digo}:`, "comparecencia");
 }
 
 function buildCuerpoPrincipalHtml() {
   const tipo = tipoById(state.tipoEscritoId);
   if (tipo.estructurado) {
-    return applyVariablesToHtml(tipo.generarCuerpoHtml(state));
+    return applyVariablesToHtml(tipo.generarCuerpoHtml(state), "cuerpo");
   }
-  return applyVariablesToHtml(rich2br(state.cuerpoPrincipal || ""));
+  return applyVariablesToHtml(rich2br(state.cuerpoPrincipal || ""), "cuerpo");
 }
 
 function buildPetitorioHtml() {
   const tipo = tipoById(state.tipoEscritoId);
   const pet = (state.petitorio || tipo.petitorioPorDefecto(state) || "").trim();
-  return applyVariablesToHtml(escapeHtml(pet));
+  return applyVariablesToHtml(escapeHtml(pet), "petitorio");
 }
 
 function buildOtrosiesHtml() {
   return state.otrosies.map((o, i) => {
-    const titulo = applyVariablesToHtml(escapeHtml((o.titulo||"").trim() || "[TÍTULO]"));
-    const contenido = applyVariablesToHtml(rich2br(o.contenido || ""));
+    const titulo = applyVariablesToHtml(escapeHtml((o.titulo||"").trim() || "[TÍTULO]"), `otrosiTitulo:${i}`);
+    const contenido = applyVariablesToHtml(rich2br(o.contenido || ""), `otrosiContenido:${i}`);
     return `<p class="indent"><span class="bold">${ordinalOtrosi(i+1)}:</span> <span class="otrosi-title">${titulo}.</span> ${contenido}</p>`;
   }).join("");
 }
@@ -2326,9 +2340,9 @@ function bindCamposVariablesEvents() {
   wrap.addEventListener("input", e => {
     const el = e.target;
     if (!el.classList.contains("campo-var-editor")) return;
-    const token = el.dataset.token;
-    if (!token) return;
-    state.camposVariables[token] = el.innerHTML;
+    const varId = el.dataset.varId;
+    if (!varId) return;
+    state.camposVariables[varId] = el.innerHTML;
     updatePreview();
   });
   wrap.addEventListener("focusin", e => {
@@ -2337,27 +2351,27 @@ function bindCamposVariablesEvents() {
     if (el.dataset.shortcutsBound === "1") return;
     el.dataset.shortcutsBound = "1";
     bindRichShortcuts(el, () => {
-      const token = el.dataset.token;
-      if (!token) return;
-      state.camposVariables[token] = el.innerHTML;
+      const varId = el.dataset.varId;
+      if (!varId) return;
+      state.camposVariables[varId] = el.innerHTML;
       updatePreview();
     });
     bindRichPaste(el, () => {
-      const token = el.dataset.token;
-      if (!token) return;
-      state.camposVariables[token] = el.innerHTML;
+      const varId = el.dataset.varId;
+      if (!varId) return;
+      state.camposVariables[varId] = el.innerHTML;
       updatePreview();
     });
   });
   wrap.addEventListener("click", e => {
     const btn = e.target.closest("button[data-format-campo]");
     if (!btn) return;
-    const token = btn.dataset.token;
-    if (!token) return;
-    const ed = wrap.querySelector(`.campo-var-editor[data-token="${CSS.escape(token)}"]`);
+    const varId = btn.dataset.varId;
+    if (!varId) return;
+    const ed = wrap.querySelector(`.campo-var-editor[data-var-id="${CSS.escape(varId)}"]`);
     applyFormatToEditor(ed, btn.dataset.formatCampo);
     if (!ed) return;
-    state.camposVariables[token] = ed.innerHTML;
+    state.camposVariables[varId] = ed.innerHTML;
     updatePreview();
   });
 }
