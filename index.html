@@ -287,6 +287,10 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <div class="field">
       <label>Tipo de escrito</label>
       <select id="tipoEscrito"></select>
+      <div class="row-inline" style="margin-top:6px;">
+        <button type="button" class="btn small" id="btnGuardarTipoEscrito">Guardar plantilla de escrito</button>
+        <button type="button" class="btn small" id="openBibliotecaEscritos">Biblioteca de escritos</button>
+      </div>
     </div>
 
     <h2 class="spaced">Datos del escrito</h2>
@@ -381,6 +385,18 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <h3>Biblioteca de otrosíes</h3>
     <p style="color: var(--muted); font-size: 13px;">Otrosíes guardados para reutilizar. Se sincronizan con el servidor si la sincronización está configurada.</p>
     <div id="bibliotecaList"></div>
+  </div>
+</div>
+
+<!-- Modal biblioteca de escritos -->
+<div class="modal-backdrop" id="modalEscritosBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalEscritosTitle">
+    <button class="close" id="modalEscritosClose" title="Cerrar">×</button>
+    <h3 id="modalEscritosTitle">Biblioteca de plantillas de escrito</h3>
+    <p style="color:var(--muted); font-size:13px; margin-top:0;">
+      Las plantillas guardadas aquí se agregan al selector de tipo de escrito.
+    </p>
+    <div id="bibliotecaEscritosList"></div>
   </div>
 </div>
 
@@ -885,6 +901,7 @@ function buildDocxBlob() {
 const LS = {
   plantillas:  "escritos.plantillas.v1",
   biblioteca:  "escritos.bibliotecaOtrosies.v1",
+  bibliotecaEscritos: "escritos.bibliotecaEscritos.v1",
   syncConfig:  "escritos.sync.config.v1",
   syncPending: "escritos.sync.pending.v1",
   syncState:   "escritos.sync.state.v1"
@@ -1463,6 +1480,7 @@ const state = {
   plantillas: [],
   plantillaSeleccionadaId: null,
   bibliotecaOtrosies: [],
+  bibliotecaEscritos: [],
 
   // campos actuales
   tipoEscritoId: "delega-poder",
@@ -1490,9 +1508,35 @@ function loadFromStorage() {
   catch (e) { state.plantillas = []; }
   try { state.bibliotecaOtrosies = JSON.parse(localStorage.getItem(LS.biblioteca) || "[]"); }
   catch (e) { state.bibliotecaOtrosies = []; }
+  try { state.bibliotecaEscritos = JSON.parse(localStorage.getItem(LS.bibliotecaEscritos) || "[]"); }
+  catch (e) { state.bibliotecaEscritos = []; }
 }
 function savePlantillas()  { localStorage.setItem(LS.plantillas, JSON.stringify(state.plantillas)); }
 function saveBiblioteca()  { localStorage.setItem(LS.biblioteca, JSON.stringify(state.bibliotecaOtrosies)); }
+function saveBibliotecaEscritos() { localStorage.setItem(LS.bibliotecaEscritos, JSON.stringify(state.bibliotecaEscritos)); }
+
+function buildTipoDesdeBiblioteca(item) {
+  return {
+    id: item.id,
+    nombre: item.nombre,
+    sumaPorDefecto: item.sumaPorDefecto || "",
+    usaDelegados: !!item.usaDelegados,
+    estructurado: false,
+    petitorioPorDefecto: () => item.petitorioPorDefecto || "",
+    cuerpoPorDefecto: () => item.cuerpoPorDefecto || "",
+    esPlantillaGuardada: true
+  };
+}
+
+function syncTiposDesdeBiblioteca() {
+  for (let i = TIPOS.length - 1; i >= 0; i--) {
+    if (TIPOS[i].esPlantillaGuardada) TIPOS.splice(i, 1);
+  }
+  state.bibliotecaEscritos.forEach(item => TIPOS.push(buildTipoDesdeBiblioteca(item)));
+  if (!TIPOS.some(t => t.id === state.tipoEscritoId)) {
+    state.tipoEscritoId = TIPOS[0].id;
+  }
+}
 
 // Auto-name template from ROL + carátula
 function nombrePlantillaAuto(enc) {
@@ -1512,6 +1556,28 @@ function capturarEncabezadoActual() {
     delegantes: JSON.parse(JSON.stringify(state.delegantes)),
     delegados:  JSON.parse(JSON.stringify(state.delegados))
   };
+}
+
+function encabezadoCompletoParaGuardar(enc) {
+  const firmantes = (enc.delegantes || []).filter(p => (p.nombre || "").trim());
+  return !!(
+    (enc.tribunal || "").trim() &&
+    (enc.materia || "").trim() &&
+    (enc.caratula || "").trim() &&
+    (enc.numeroCausa || "").trim() &&
+    (enc.parte || "").trim() &&
+    firmantes.length
+  );
+}
+
+function updateGuardarPlantillaUI() {
+  const btn = document.getElementById("btnGuardarPlantilla");
+  if (!btn) return;
+  const ok = encabezadoCompletoParaGuardar(capturarEncabezadoActual());
+  btn.disabled = !ok;
+  btn.title = ok
+    ? "Guardar plantilla de causa"
+    : "Complete tribunal, materia, carátula, RIT/ROL, parte y al menos un firmante para guardar.";
 }
 
 function aplicarEncabezadoAlState(enc) {
@@ -1542,6 +1608,7 @@ function renderAll() {
   renderDelegadosIfNeeded();
   renderSumaBody();
   renderOtrosies();
+  updateGuardarPlantillaUI();
   updatePreview();
 }
 
@@ -1744,6 +1811,7 @@ function updatePreview() {
   document.getElementById("cuerpoPrincipal").placeholder = tipo.estructurado ? "" : "Redacte el cuerpo del escrito…";
   document.getElementById("sumaPrincipal").placeholder = tipo.sumaPorDefecto || "Ej.: Solicita lo que indica";
   document.getElementById("petitorio").placeholder = tipo.petitorioPorDefecto(state);
+  updateGuardarPlantillaUI();
 }
 
 // =============== EXPORT (Copy / DOCX) ===============
@@ -2048,6 +2116,10 @@ function cargarPlantilla(id) {
 
 function guardarPlantilla() {
   const enc = capturarEncabezadoActual();
+  if (!encabezadoCompletoParaGuardar(enc)) {
+    showStatus("Complete los datos de la causa antes de guardar la plantilla.", "err");
+    return;
+  }
   const nombre = nombrePlantillaAuto(enc);
   if (state.plantillaSeleccionadaId) {
     // Actualizar existente
@@ -2112,7 +2184,8 @@ function exportarJSON() {
     version: "1.0",
     exportadoEn: new Date().toISOString(),
     plantillas: state.plantillas,
-    bibliotecaOtrosies: state.bibliotecaOtrosies
+    bibliotecaOtrosies: state.bibliotecaOtrosies,
+    bibliotecaEscritos: state.bibliotecaEscritos
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -2134,6 +2207,7 @@ function importarJSON(e) {
       if (!data || typeof data !== "object") throw new Error("JSON inválido");
       const plantillasNuevas = Array.isArray(data.plantillas) ? data.plantillas : [];
       const bibNueva = Array.isArray(data.bibliotecaOtrosies) ? data.bibliotecaOtrosies : [];
+      const escritosNuevos = Array.isArray(data.bibliotecaEscritos) ? data.bibliotecaEscritos : [];
 
       const modo = window.prompt(
         "Importación:\n" +
@@ -2146,17 +2220,23 @@ function importarJSON(e) {
       if (modo.trim().toLowerCase() === "reemplazar") {
         state.plantillas = plantillasNuevas;
         state.bibliotecaOtrosies = bibNueva;
+        state.bibliotecaEscritos = escritosNuevos;
       } else {
         // Fusionar por id
         const idsExistentes = new Set(state.plantillas.map(p => p.id));
         plantillasNuevas.forEach(p => { if (!idsExistentes.has(p.id)) state.plantillas.push(p); });
         const idsBib = new Set(state.bibliotecaOtrosies.map(b => b.id));
         bibNueva.forEach(b => { if (!idsBib.has(b.id)) state.bibliotecaOtrosies.push(b); });
+        const idsEscr = new Set(state.bibliotecaEscritos.map(t => t.id));
+        escritosNuevos.forEach(t => { if (!idsEscr.has(t.id)) state.bibliotecaEscritos.push(t); });
       }
       savePlantillas();
       saveBiblioteca();
+      saveBibliotecaEscritos();
+      syncTiposDesdeBiblioteca();
+      renderTipoSelector();
       renderPlantillaSelector();
-      showStatus(`Importadas ${plantillasNuevas.length} plantilla(s) y ${bibNueva.length} otrosí(es).`, "ok");
+      showStatus(`Importadas ${plantillasNuevas.length} plantilla(s), ${bibNueva.length} otrosí(es) y ${escritosNuevos.length} plantilla(s) de escrito.`, "ok");
     } catch (err) {
       showStatus("Error al importar JSON: " + err.message, "err");
     } finally {
@@ -2219,6 +2299,95 @@ function bindBibliotecaEvents() {
       saveBiblioteca();
       Sync.onOtrosiDelete(uuidEliminado);
       renderBiblioteca();
+    }
+  });
+}
+
+// =============== BIBLIOTECA DE ESCRITOS ===============
+function openBibliotecaEscritos() {
+  renderBibliotecaEscritos();
+  document.getElementById("modalEscritosBackdrop").classList.add("open");
+}
+function closeBibliotecaEscritos() {
+  document.getElementById("modalEscritosBackdrop").classList.remove("open");
+}
+function renderBibliotecaEscritos() {
+  const wrap = document.getElementById("bibliotecaEscritosList");
+  wrap.innerHTML = "";
+  if (!state.bibliotecaEscritos.length) {
+    wrap.innerHTML = `<p style="color:var(--muted); font-size:13px;">No hay plantillas de escrito guardadas todavía.</p>`;
+    return;
+  }
+  state.bibliotecaEscritos.forEach((t, i) => {
+    const item = document.createElement("div");
+    item.className = "lib-item";
+    item.innerHTML = `
+      <div class="title">${escapeHtml(t.nombre)}</div>
+      <div class="content">Suma: ${escapeHtml(t.sumaPorDefecto || "—")} · Petitorio: ${escapeHtml(t.petitorioPorDefecto || "—")}</div>
+      <div class="actions-row">
+        <button type="button" class="btn primary small" data-use-written="${i}">Usar</button>
+        <button type="button" class="btn small danger" data-del-written="${i}">Eliminar</button>
+      </div>`;
+    wrap.appendChild(item);
+  });
+}
+
+function guardarTipoEscritoActual() {
+  const nombre = (window.prompt("Nombre de la plantilla de escrito:") || "").trim();
+  if (!nombre) { showStatus("Nombre obligatorio para guardar la plantilla de escrito.", "err"); return; }
+  const tipoActual = tipoById(state.tipoEscritoId);
+  const nuevo = {
+    id: "tpl-escrito-" + uuid(),
+    nombre,
+    usaDelegados: !!tipoActual.usaDelegados,
+    sumaPorDefecto: (state.sumaPrincipal || "").trim(),
+    cuerpoPorDefecto: tipoActual.estructurado
+      ? String(tipoActual.generarCuerpoHtml(state) || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+      : (state.cuerpoPrincipal || "").trim(),
+    petitorioPorDefecto: (state.petitorio || "").trim(),
+    creadoEn: new Date().toISOString(),
+    actualizadoEn: new Date().toISOString()
+  };
+  state.bibliotecaEscritos.push(nuevo);
+  saveBibliotecaEscritos();
+  syncTiposDesdeBiblioteca();
+  state.tipoEscritoId = nuevo.id;
+  renderTipoSelector();
+  updatePreview();
+  showStatus("Plantilla de escrito guardada y agregada al selector de tipo.", "ok");
+}
+
+function bindBibliotecaEscritosEvents() {
+  document.getElementById("btnGuardarTipoEscrito").addEventListener("click", guardarTipoEscritoActual);
+  document.getElementById("openBibliotecaEscritos").addEventListener("click", openBibliotecaEscritos);
+  document.getElementById("modalEscritosClose").addEventListener("click", closeBibliotecaEscritos);
+  document.getElementById("modalEscritosBackdrop").addEventListener("click", e => {
+    if (e.target.id === "modalEscritosBackdrop") closeBibliotecaEscritos();
+  });
+  document.getElementById("bibliotecaEscritosList").addEventListener("click", e => {
+    const el = e.target;
+    if (el.dataset.useWritten != null) {
+      const i = parseInt(el.dataset.useWritten, 10);
+      const item = state.bibliotecaEscritos[i];
+      if (!item) return;
+      cambiarTipoEscrito(item.id);
+      document.getElementById("tipoEscrito").value = item.id;
+      closeBibliotecaEscritos();
+      showStatus(`Plantilla aplicada: ${item.nombre}`, "ok");
+      return;
+    }
+    if (el.dataset.delWritten != null) {
+      const i = parseInt(el.dataset.delWritten, 10);
+      const item = state.bibliotecaEscritos[i];
+      if (!item) return;
+      if (!window.confirm(`¿Eliminar plantilla de escrito «${item.nombre}»?`)) return;
+      state.bibliotecaEscritos.splice(i, 1);
+      saveBibliotecaEscritos();
+      syncTiposDesdeBiblioteca();
+      renderTipoSelector();
+      renderBibliotecaEscritos();
+      updatePreview();
+      showStatus("Plantilla de escrito eliminada.", "ok");
     }
   });
 }
@@ -2439,6 +2608,7 @@ function bindSyncEvents() {
 // =============== INIT ===============
 function init() {
   loadFromStorage();
+  syncTiposDesdeBiblioteca();
   const t = tipoById(state.tipoEscritoId);
   state.sumaPrincipal = t.sumaPorDefecto || "";
   state.cuerpoPrincipal = t.estructurado ? "" : (t.cuerpoPorDefecto ? t.cuerpoPorDefecto(state) : "");
@@ -2451,6 +2621,7 @@ function init() {
   bindSumaBodyEvents();
   bindOtrosiesEvents();
   bindBibliotecaEvents();
+  bindBibliotecaEscritosEvents();
   bindExportEvents();
   bindSyncEvents();
 
