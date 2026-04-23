@@ -232,6 +232,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 .page p.center { text-align: center; }
 .page p.indent { text-indent: 36pt; }
 .page p.suma { text-indent: 0; }
+.page, .page * { max-width: 100%; }
+.page p, .page div, .page span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .page .bold { font-weight: bold; }
 .page .uline { text-decoration: underline; }
 .page .otrosi-title { font-weight: bold; }
@@ -256,20 +261,48 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 .lib-item .title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .lib-item .content { font-size: 12px; color: var(--muted); white-space: pre-wrap; max-height: 80px; overflow: hidden; }
 .lib-item .actions-row { margin-top: 8px; display: flex; gap: 6px; }
+
+.format-bar { display:flex; gap:6px; flex-wrap:wrap; margin: 6px 0; }
+.rich-editor {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  min-height: 120px;
+  font-family: inherit;
+  font-size: 13px;
+  background: #fff;
+}
+.rich-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.15);
+}
+.rich-editor:empty:before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+}
+[data-preview-editable="1"] {
+  border-radius: 4px;
+}
+[data-preview-editable="1"]:focus {
+  outline: 2px dashed rgba(29, 78, 216, 0.35);
+  background: rgba(29, 78, 216, 0.04);
+}
+#cuerpoPrincipalEditor {
+  /* Máximo aproximado de 10 líneas visibles; luego scroll */
+  max-height: calc(1.55em * 10 + 16px);
+  overflow-y: auto;
+}
 </style>
 </head>
 <body>
 
 <h1>Generador de escritos</h1>
-<div class="subtitle">Selecciona el tipo de escrito, rellena los campos y agrega otrosíes. Puedes guardar los datos del encabezado como plantilla por causa y reutilizarlos después.</div>
+<div class="subtitle">Rellena los datos del escrito, guarda plantillas de causa y de tipo de escrito, y agrega otrosíes.</div>
 
 <!-- Top bar: plantilla selector -->
 <div class="topbar">
-  <label>Plantilla de causa:</label>
-  <select id="plantillaSelector"></select>
-  <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
-  <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
-  <button class="btn small danger" id="btnEliminarPlantilla">Eliminar</button>
   <span class="spacer"></span>
   <span id="syncChip" class="sync-chip sync-off" title="Estado de sincronización con el servidor">● Sin conectar</span>
   <button class="btn small" id="btnSyncNow" title="Sincronizar ahora con el servidor" style="display:none;">Sincronizar</button>
@@ -284,27 +317,52 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
   <!-- ============ FORM ============ -->
   <div class="panel">
 
+    <h2>Datos del escrito</h2>
     <div class="field">
-      <label>Tipo de escrito</label>
-      <select id="tipoEscrito"></select>
+      <label>Modalidad de comparecencia</label>
+      <select id="modalidadComparecencia">
+        <option value="mero-tramite">1. Mero trámite</option>
+        <option value="con-patrocinio-poder">2. Con patrocinio y poder</option>
+        <option value="con-mandato-judicial">3. Con mandato judicial</option>
+        <option value="con-patrocinio-poder-causa-iniciada">4. Con patrocinio y poder (causa ya iniciada)</option>
+      </select>
     </div>
-
-    <h2 class="spaced">Datos del escrito</h2>
     <div class="field"><label>Tribunal</label><input type="text" id="tribunal" placeholder="Ej.: PRIMER JUZGADO DE LETRAS DEL TRABAJO DE SANTIAGO"></div>
-    <div class="field"><label>Materia</label><input type="text" id="materia" placeholder="Ej.: despido injustificado"></div>
-    <div class="field"><label>Carátula <span class="hint">(se mostrará siempre en mayúsculas)</span></label><input type="text" id="caratula" placeholder="Ej.: Pérez con Empresa X S.A."></div>
-    <div class="field"><label>Parte que representa</label><input type="text" id="parte" placeholder="demandada / demandante / querellada"></div>
-    <div class="field">
+    <div class="field" id="fieldMateria"><label>Materia</label><input type="text" id="materia" placeholder="Ej.: despido injustificado"></div>
+    <div class="field" id="fieldCaratula"><label>Carátula <span class="hint">(se mostrará siempre en mayúsculas)</span></label><input type="text" id="caratula" placeholder="Ej.: Pérez con Empresa X S.A."></div>
+    <div class="field" id="fieldParte"><label>Parte que presenta</label><input type="text" id="parte" placeholder="demandada / demandante / querellada"></div>
+    <div class="field" id="fieldRitRol">
       <label>RIT / ROL y número</label>
       <div class="row-2">
         <select id="tipoCausa"><option value="RIT">RIT</option><option value="ROL">ROL</option></select>
         <input type="text" id="numeroCausa" placeholder="Ej.: T-123-2026">
       </div>
     </div>
+    <div id="comparecenciaExtras" style="display:none;">
+      <div class="field"><label>Cliente</label><input type="text" id="clienteNombre" placeholder="Ej.: Juan Pérez González"></div>
+      <div class="field"><label>Profesión / oficio del cliente</label><input type="text" id="clienteProfesion" placeholder="Ej.: contador auditor"></div>
+      <div class="field"><label>RUT del cliente</label><input type="text" id="clienteRut" placeholder="Ej.: 12.345.678-5"></div>
+      <div class="field"><label>Domicilio para estos efectos</label><input type="text" id="comparecenciaDomicilio" placeholder="Ej.: Av. Apoquindo 1234, oficina 501, Las Condes"></div>
+    </div>
 
-    <h2 class="spaced">Abogado/a(s) que comparece(n)</h2>
-    <div id="delegantesList"></div>
-    <button type="button" class="add-btn" id="addDelegante">+ Agregar firmante</button>
+    <div id="sectionDeleganteComparece">
+      <h2 class="spaced">Abogado/a que comparece</h2>
+      <div id="delegantesList"></div>
+      <button type="button" class="add-btn" id="addDelegante">+ Agregar firmante</button>
+    </div>
+
+    <div class="actions" id="plantillaCausaActions">
+      <label style="margin:0;">Plantilla de causa</label>
+      <select id="plantillaSelector" style="min-width:260px; width:auto;"></select>
+      <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
+      <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
+      <button class="btn small danger" id="btnEliminarPlantilla">Eliminar</button>
+    </div>
+
+    <h2 class="spaced">Tipo de escrito</h2>
+    <div class="field">
+      <select id="tipoEscrito"></select>
+    </div>
 
     <div id="delegadosSection">
       <h2 class="spaced">Abogado/a(s) beneficiario/a(s) <span class="hint" style="text-transform:none; letter-spacing:0;">(delegados, patrocinados, etc.)</span></h2>
@@ -317,9 +375,29 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       <input type="text" id="sumaPrincipal" placeholder="Ej.: Solicita lo que indica">
     </div>
 
+    <h2 class="spaced">Módulos que componen el escrito</h2>
+    <div class="field" style="margin-top:10px;">
+      <label>Biblioteca de módulos (nutrida desde biblioteca de párrafos)</label>
+      <select id="moduloSelector"></select>
+      <div class="actions-row" style="margin-bottom:8px;">
+        <button type="button" class="btn small" id="btnAddModuloParrafo">+ Insertar módulo seleccionado en el escrito</button>
+      </div>
+      <div id="modulosEscritoList"></div>
+    </div>
+    <h2 class="spaced" id="camposVarsTitle" style="display:none;">Campos variables detectados</h2>
+    <div id="camposVariablesWrap"></div>
+
     <h2 class="spaced">Cuerpo principal</h2>
+    <div class="format-bar" id="cuerpoFormatBar">
+      <button type="button" class="btn small" data-cmd="bold"><b>N</b></button>
+      <button type="button" class="btn small" data-cmd="italic"><i>I</i></button>
+      <button type="button" class="btn small" data-cmd="underline"><u>S</u></button>
+      <button type="button" class="btn small" data-cmd="indent">Sangría</button>
+      <button type="button" class="btn small" data-cmd="linebreak">↵</button>
+    </div>
     <div id="cuerpoTextareaWrap">
-      <textarea id="cuerpoPrincipal" rows="8" class="prose" placeholder="Redacte el cuerpo del escrito…"></textarea>
+      <div id="cuerpoPrincipalEditor" class="rich-editor prose" contenteditable="true" data-placeholder="Redacte el cuerpo del escrito…"></div>
+      <textarea id="cuerpoPrincipal" rows="8" class="prose" style="display:none;"></textarea>
     </div>
     <div id="cuerpoNotaEstructurado" style="display:none; color: var(--muted); font-size: 12px;">
       El cuerpo de este tipo de escrito se genera automáticamente desde los campos anteriores.
@@ -330,6 +408,11 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       <input type="text" id="petitorio" placeholder="Ej.: tener presente la delegación de poder.">
     </div>
 
+    <div class="actions" style="margin-top:10px;">
+      <button type="button" class="btn small" id="btnGuardarTipoEscrito">Guardar plantilla de escrito</button>
+      <button type="button" class="btn small" id="openBibliotecaEscritos">Biblioteca de escritos</button>
+    </div>
+
     <h2 class="spaced">Otrosíes
       <span>
         <button type="button" class="btn small" id="openBiblioteca">Biblioteca</button>
@@ -337,6 +420,29 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     </h2>
     <div id="otrosiesList"></div>
     <button type="button" class="add-btn" id="addOtrosi">+ Agregar otrosí</button>
+
+    <h2 class="spaced">Biblioteca de párrafos
+      <span>
+        <button type="button" class="btn small" id="openBibliotecaParrafos">Biblioteca</button>
+      </span>
+    </h2>
+    <div class="field">
+      <label>Plantillas de párrafo guardadas</label>
+      <select id="parrafoSelector"></select>
+    </div>
+    <div class="field">
+      <label>Nombre del párrafo</label>
+      <input type="text" id="parrafoNombre" placeholder="Ej.: Hechos no controvertidos">
+    </div>
+    <div class="field">
+      <label>Contenido del párrafo</label>
+      <div id="parrafoEditor" class="rich-editor prose" contenteditable="true" data-placeholder="Escriba o pegue aquí un párrafo plantilla…"></div>
+    </div>
+    <div class="actions" style="margin-top:8px;">
+      <button type="button" class="btn small" id="btnGuardarParrafo">Guardar párrafo</button>
+      <button type="button" class="btn small" id="btnInsertarParrafo">Insertar en cuerpo</button>
+      <button type="button" class="btn small danger" id="btnEliminarParrafo">Eliminar párrafo</button>
+    </div>
 
     <div class="actions">
       <button class="btn primary" id="btnCopy">Copiar con formato</button>
@@ -355,16 +461,16 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
         <div class="rule"></div>
       </div>
 
-      <p class="suma" id="pv_suma"></p>
+      <p class="suma" id="pv_suma" contenteditable="true" data-preview-editable="1"></p>
       <p>&nbsp;</p>
-      <p class="center bold" id="pv_tribunal">[TRIBUNAL]</p>
+      <p class="center bold" id="pv_tribunal" contenteditable="true" data-preview-editable="1">[TRIBUNAL]</p>
       <p>&nbsp;</p>
       <p class="indent" id="pv_comparecencia"></p>
       <p>&nbsp;</p>
-      <p class="indent" id="pv_cuerpo"></p>
+      <p class="indent" id="pv_cuerpo" contenteditable="true" data-preview-editable="1"></p>
       <p>&nbsp;</p>
       <p class="indent bold">POR TANTO,</p>
-      <p class="indent"><span class="bold">PIDO A S.S.</span> <span id="pv_petitorio"></span></p>
+      <p class="indent"><span class="bold">PIDO A S.S.</span> <span id="pv_petitorio" contenteditable="true" data-preview-editable="1"></span></p>
       <div id="pv_otrosies"></div>
 
       <div class="ftr">
@@ -384,20 +490,44 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
   </div>
 </div>
 
+<!-- Modal biblioteca de escritos -->
+<div class="modal-backdrop" id="modalEscritosBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalEscritosTitle">
+    <button class="close" id="modalEscritosClose" title="Cerrar">×</button>
+    <h3 id="modalEscritosTitle">Biblioteca de plantillas de escrito</h3>
+    <p style="color:var(--muted); font-size:13px; margin-top:0;">
+      Las plantillas guardadas aquí se agregan al selector de tipo de escrito.
+    </p>
+    <div id="bibliotecaEscritosList"></div>
+  </div>
+</div>
+
+<!-- Modal biblioteca de párrafos -->
+<div class="modal-backdrop" id="modalParrafosBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalParrafosTitle">
+    <button class="close" id="modalParrafosClose" title="Cerrar">×</button>
+    <h3 id="modalParrafosTitle">Biblioteca de párrafos</h3>
+    <p style="color:var(--muted); font-size:13px; margin-top:0;">
+      Vista previa de párrafos guardados para reutilizar en el cuerpo del escrito.
+    </p>
+    <div id="bibliotecaParrafosList"></div>
+  </div>
+</div>
+
 <!-- Modal: Configuración de sincronización -->
 <div class="modal-backdrop" id="syncModalBackdrop">
   <div class="modal">
     <button class="close" id="syncModalClose" title="Cerrar">×</button>
     <h3>Sincronización con servidor</h3>
     <p style="color: var(--muted); font-size: 13px; margin-top: 0;">
-      Las plantillas de causa y los otrosíes de biblioteca se guardarán en tu servidor (cPanel) y estarán disponibles en cualquier equipo con acceso.
+      Las plantillas de causa, los otrosíes y las plantillas de escrito se guardarán en tu servidor (cPanel) y estarán disponibles en cualquier equipo con acceso.
       Mientras no haya conexión, los cambios se guardan localmente y se sincronizan automáticamente al recuperarla.
     </p>
 
     <div class="field">
       <label>URL base de la API</label>
       <input type="text" id="syncApiUrl" placeholder="https://tudominio.cl/generador/api">
-      <span class="hint" style="text-transform:none; letter-spacing:0;">Sin barra final. Debe apuntar a la carpeta que contiene plantillas.php y otrosies.php.</span>
+      <span class="hint" style="text-transform:none; letter-spacing:0;">Sin barra final. Debe apuntar a la carpeta que contiene plantillas.php, otrosies.php y escritos.php.</span>
     </div>
     <div class="field">
       <label>Token de acceso</label>
@@ -424,6 +554,7 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
   </div>
 </div>
 
+<script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <script>
 
 // ==========================================================================
@@ -598,14 +729,14 @@ function decodeHtmlEntities(s) {
 // Devuelve: Array<Array<{text, bold?, italic?, underline?, lineBreak?}>>
 function htmlToDocxParagraphs(html) {
   const src = String(html||"");
-  // Partir primero por párrafos: si no hay <p>, todo va en uno solo.
+  // Partir primero por párrafos: soporta <p> y <div> como bloques.
   let chunks;
-  if (/<p[\s>]/i.test(src)) {
-    // Extraer el contenido dentro de cada <p>…</p>
+  if (/<(p|div)[\s>]/i.test(src)) {
+    // Extraer el contenido dentro de cada <p>…</p> o <div>…</div>
     chunks = [];
-    const re = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
+    const re = /<(p|div)\b[^>]*>([\s\S]*?)<\/\1>/gi;
     let m;
-    while ((m = re.exec(src)) !== null) chunks.push(m[1]);
+    while ((m = re.exec(src)) !== null) chunks.push(m[2]);
     if (!chunks.length) chunks = [src];
   } else {
     chunks = [src];
@@ -655,9 +786,12 @@ function parseInlineToRuns(html) {
         const isBoldSpan  = /class\s*=\s*["'][^"']*\bbold\b[^"']*["']/i.test(attrs);
         const isUSpan     = /class\s*=\s*["'][^"']*\buline\b[^"']*["']/i.test(attrs);
         const isItalSpan  = /class\s*=\s*["'][^"']*\b(italic|italica|italica|em)\b[^"']*["']/i.test(attrs);
-        if (isBoldSpan)      { counts.bold++; spanStack.push("bold"); }
-        else if (isItalSpan) { counts.italic++; spanStack.push("italic"); }
-        else if (isUSpan)    { counts.underline++; spanStack.push("uline"); }
+        const isBoldStyle = /style\s*=\s*["'][^"']*font-weight\s*:\s*(bold|[6-9]00)[^"']*["']/i.test(attrs);
+        const isItalStyle = /style\s*=\s*["'][^"']*font-style\s*:\s*italic[^"']*["']/i.test(attrs);
+        const isUStyle    = /style\s*=\s*["'][^"']*text-decoration[^"']*underline[^"']*["']/i.test(attrs);
+        if (isBoldSpan || isBoldStyle)      { counts.bold++; spanStack.push("bold"); }
+        else if (isItalSpan || isItalStyle) { counts.italic++; spanStack.push("italic"); }
+        else if (isUSpan || isUStyle)       { counts.underline++; spanStack.push("uline"); }
         else                 { spanStack.push(null); }
       }
       continue;
@@ -690,54 +824,65 @@ function parseInlineToRuns(html) {
 
 // ----- Builders por sección del escrito (espejo de los builders HTML) -----
 function buildDocxSumaRuns() {
-  const tipo = tipoById(state.tipoEscritoId);
-  const principal = (state.sumaPrincipal || tipo.sumaPorDefecto || "Asunto principal").trim();
-  if (!state.otrosies || state.otrosies.length === 0) {
-    return [ { text: principal.toUpperCase(), bold: true, underline: true }, { text: "." } ];
-  }
-  const runs = [
-    { text: "EN LO PRINCIPAL: ", bold: true },
-    { text: principal }
-  ];
-  state.otrosies.forEach((o, i) => {
-    runs.push({ text: "; " });
-    runs.push({ text: ordinalOtrosi(i+1) + ": ", bold: true });
-    runs.push({ text: (o.titulo||"").trim() || "[título del otrosí]" });
-  });
-  runs.push({ text: "." });
-  return runs;
+  const parsed = htmlToDocxParagraphs(buildSumaLineHtml());
+  return parsed[0] || [{ text: "" }];
 }
 
 function buildDocxComparecenciaRuns() {
+  const modo = state.modalidadComparecencia || "mero-tramite";
   const d = concordanciaDelegantes(state.delegantes);
-  // Nombres: array de {text,bold}
   const runs = [];
+  if (modo === "con-patrocinio-poder") {
+    const cliente = applyVariablesToText((state.clienteNombre || "").trim() || "[CLIENTE]", "comparecencia");
+    const profesion = applyVariablesToText((state.clienteProfesion || "").trim() || "[PROFESIÓN/OFICIO]", "comparecencia");
+    const rut = applyVariablesToText((state.clienteRut || "").trim() || "[NÚMERO DE RUT]", "comparecencia");
+    const domicilio = applyVariablesToText((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]", "comparecencia");
+    runs.push({ text: cliente, bold: true });
+    runs.push({ text: `, ${profesion}, RUT ${rut}, domiciliado para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:` });
+    return runs;
+  }
+  if (modo === "con-mandato-judicial") {
+    const cliente = applyVariablesToText((state.clienteNombre || "").trim() || "[CLIENTE]", "comparecencia");
+    const domicilio = applyVariablesToText((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]", "comparecencia");
+    const nombres = d.act.length ? joinNames(d.act.map(p => p.nombre.trim().toUpperCase())) : "[ABOGADO/A O ABOGADOS/AS]";
+    runs.push({ text: nombres, bold: true });
+    runs.push({ text: `, abogado, en representación de ${cliente}, según se acreditará, todos domiciliados para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:` });
+    return runs;
+  }
+  if (modo === "con-patrocinio-poder-causa-iniciada") {
+    const cliente = applyVariablesToText((state.clienteNombre || "").trim() || "[CLIENTE]", "comparecencia");
+    const profesion = applyVariablesToText((state.clienteProfesion || "").trim() || "[PROFESIÓN/OFICIO]", "comparecencia");
+    const rut = applyVariablesToText((state.clienteRut || "").trim() || "[NÚMERO DE RUT]", "comparecencia");
+    const domicilio = applyVariablesToText((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]", "comparecencia");
+    const materia = applyVariablesToText((state.materia || "").trim() || "[MATERIA]", "comparecencia");
+    const caratula = applyVariablesToText(((state.caratula || "").trim() || "[CARÁTULA]").toUpperCase(), "comparecencia");
+    const tipo = state.tipoCausa;
+    const numero = applyVariablesToText((state.numeroCausa || "").trim() || "[NÚMERO]", "comparecencia");
+    runs.push({ text: cliente, bold: true });
+    runs.push({ text: `, ${profesion}, RUT ${rut}, domiciliado para estos efectos en ${domicilio}, en autos sobre ${materia}, caratulada ` });
+    runs.push({ text: "\u201C" + caratula + "\u201D", bold: true });
+    runs.push({ text: `, Causa ${tipo} ${numero}, a S.S., respetuosamente, digo:` });
+    return runs;
+  }
+
   const act = (state.delegantes||[]).filter(p => (p.nombre||"").trim());
   const pl  = act.length > 1;
   const g   = groupGender(state.delegantes||[]);
-  if (act.length === 0) {
-    runs.push({ text: "[ABOGADO/A O ABOGADOS/AS]", bold: true });
-  } else {
-    const names = act.map(p => p.nombre.trim().toUpperCase());
-    const joined = names.length === 1 ? names[0]
-                 : names.length === 2 ? `${names[0]}, y ${names[1]}`
-                 : `${names.slice(0,-1).join(", ")}, y ${names[names.length-1]}`;
-    runs.push({ text: joined, bold: true });
-  }
+  if (act.length === 0) runs.push({ text: "[ABOGADO/A O ABOGADOS/AS]", bold: true });
+  else runs.push({ text: joinNames(act.map(p => p.nombre.trim().toUpperCase())), bold: true });
   const profesion = pl ? (g === "F" ? "abogadas" : "abogados") : (g === "F" ? "abogada" : "abogado");
   const parte     = (state.parte||"").trim() || "demandada";
-  const materia   = (state.materia||"").trim() || "[MATERIA]";
-  const caratula  = ((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase();
+  const materia   = applyVariablesToText((state.materia||"").trim() || "[MATERIA]", "comparecencia");
+  const caratula  = applyVariablesToText(((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase(), "comparecencia");
   const tipo      = state.tipoCausa;
-  const numero    = (state.numeroCausa||"").trim() || "[NÚMERO]";
-  const digo      = d.digo;
+  const numero    = applyVariablesToText((state.numeroCausa||"").trim() || "[NÚMERO]", "comparecencia");
   runs.push({ text: `, ${profesion}, por la parte ${parte}, en autos sobre ${materia}, caratulada ` });
   runs.push({ text: "\u201C" + caratula + "\u201D", bold: true });
   runs.push({ text: ", Causa " });
   runs.push({ text: tipo, bold: true });
   runs.push({ text: " " });
   runs.push({ text: numero, bold: true });
-  runs.push({ text: `, a S.S., respetuosamente, ${digo}:` });
+  runs.push({ text: `, a S.S., respetuosamente, ${d.digo}:` });
   return runs;
 }
 
@@ -745,14 +890,14 @@ function buildDocxCuerpoParas() {
   const tipo = tipoById(state.tipoEscritoId);
   if (tipo.estructurado) {
     // Para tipos estructurados: preservar negrita/cursiva/subrayado del HTML original.
-    const html = tipo.generarCuerpoHtml(state);
+    const html = applyVariablesToHtml(tipo.generarCuerpoHtml(state), "cuerpo");
     const paragraphs = htmlToDocxParagraphs(html);
     return paragraphs.map(runs => dxP(dxRuns(runs), { align: "both", indent: 720 }));
   }
   // Tipos libres: el textarea contiene solo texto plano; separamos por líneas en blanco.
-  const txt = state.cuerpoPrincipal || "";
-  const blocks = txt.split(/\n{2,}/);
-  return blocks.map(b => dxP(dxRuns([{ text: b.replace(/\n/g, " ") }]), { align: "both", indent: 720 }));
+  const html = applyVariablesToHtml(state.cuerpoPrincipal || "", "cuerpo");
+  const paragraphs = htmlToDocxParagraphs(html);
+  return paragraphs.map(runs => dxP(dxRuns(runs), { align: "both", indent: 720 }));
 }
 
 function buildDocxDocument() {
@@ -774,15 +919,22 @@ function buildDocxDocument() {
   paras.push(dxP(dxRuns([{ text: "POR TANTO,", bold: true }]), { align: "both", indent: 720 }));
   const tipo = tipoById(state.tipoEscritoId);
   const pet  = (state.petitorio || tipo.petitorioPorDefecto(state) || "").trim();
-  paras.push(dxP(dxRuns([{ text: "PIDO A S.S. ", bold: true }, { text: pet }]), { align: "both", indent: 720 }));
+  const petRuns = htmlToDocxParagraphs(applyVariablesToHtml(escapeHtml(pet), "petitorio"))[0] || [{ text: pet }];
+  paras.push(dxP(dxRuns([{ text: "PIDO A S.S. ", bold: true }, ...petRuns]), { align: "both", indent: 720 }));
   // OTROSÍES
   state.otrosies.forEach((o, i) => {
     paras.push(dxP(""));
-    paras.push(dxP(dxRuns([
+    const parsed = htmlToDocxParagraphs(applyVariablesToHtml(o.contenido || "", `otrosiContenido:${i}`));
+    if (!parsed.length) parsed.push([{ text: "" }]);
+    const firstRuns = [
       { text: ordinalOtrosi(i+1) + ": ", bold: true },
-      { text: ((o.titulo||"").trim() || "[TÍTULO]") + ". ", bold: true },
-      { text: (o.contenido||"").replace(/\n/g, " ") }
-    ]), { align: "both", indent: 720 }));
+      { text: applyVariablesToText((o.titulo||"").trim() || "[TÍTULO]", `otrosiTitulo:${i}`) + ". ", bold: true },
+      ...parsed[0]
+    ];
+    paras.push(dxP(dxRuns(firstRuns), { align: "both", indent: 720 }));
+    for (let p = 1; p < parsed.length; p++) {
+      paras.push(dxP(dxRuns(parsed[p]), { align: "both", indent: 720 }));
+    }
   });
   // Section properties — márgenes A4 ~2.54/3.0/2.54/3.0 cm (= 1440/1701/1440/1701 twips)
   const sectPr = `<w:sectPr>
@@ -885,6 +1037,9 @@ function buildDocxBlob() {
 const LS = {
   plantillas:  "escritos.plantillas.v1",
   biblioteca:  "escritos.bibliotecaOtrosies.v1",
+  bibliotecaEscritos: "escritos.bibliotecaEscritos.v1",
+  bibliotecaParrafos: "escritos.bibliotecaParrafos.v1",
+  bibliotecaModulos: "escritos.bibliotecaModulosTxt.v1",
   syncConfig:  "escritos.sync.config.v1",
   syncPending: "escritos.sync.pending.v1",
   syncState:   "escritos.sync.state.v1"
@@ -1014,6 +1169,44 @@ const Sync = (() => {
     enqueue({ kind: "otrosi", op: "delete", uuid, ts: new Date().toISOString() });
     scheduleFlush();
   }
+  function onEscritoUpsert(t) {
+    if (!isConfigured()) return;
+    enqueue({
+      kind: "escrito", op: "upsert",
+      uuid: t.id,
+      payload: {
+        uuid: t.id,
+        nombre: t.nombre,
+        sumaPorDefecto: t.sumaPorDefecto || "",
+        cuerpoPorDefecto: t.cuerpoPorDefecto || "",
+        petitorioPorDefecto: t.petitorioPorDefecto || "",
+        estructuraJson: Array.isArray(t.estructuraJson) ? t.estructuraJson : [],
+        usaDelegados: !!t.usaDelegados
+      },
+      ts: new Date().toISOString()
+    });
+    scheduleFlush();
+  }
+  function onEscritoDelete(uuid) {
+    if (!isConfigured()) return;
+    enqueue({ kind: "escrito", op: "delete", uuid, ts: new Date().toISOString() });
+    scheduleFlush();
+  }
+  function onParrafoUpsert(p) {
+    if (!isConfigured()) return;
+    enqueue({
+      kind: "parrafo", op: "upsert",
+      uuid: p.id,
+      payload: { uuid: p.id, nombre: p.nombre, contenido: p.contenido },
+      ts: new Date().toISOString()
+    });
+    scheduleFlush();
+  }
+  function onParrafoDelete(uuid) {
+    if (!isConfigured()) return;
+    enqueue({ kind: "parrafo", op: "delete", uuid, ts: new Date().toISOString() });
+    scheduleFlush();
+  }
 
   // ----- Flush (push) -----
   let flushTimer = null;
@@ -1030,7 +1223,11 @@ const Sync = (() => {
     let sent = 0;
     for (const op of q) {
       try {
-        const path = op.kind === "plantilla" ? "/plantillas.php" : "/otrosies.php";
+        const path =
+          op.kind === "plantilla" ? "/plantillas.php" :
+          op.kind === "otrosi" ? "/otrosies.php" :
+          op.kind === "escrito" ? "/escritos.php" :
+          "/parrafos.php";
         if (op.op === "upsert") {
           await apiFetch(path, { method: "POST", body: op.payload });
         } else if (op.op === "delete") {
@@ -1059,10 +1256,19 @@ const Sync = (() => {
   async function pull() {
     if (!isConfigured()) return { pulled: 0, changed: false };
     const st = getState();
-    const since = st.lastPullAt || "1970-01-01T00:00:00.000Z";
+    // Si el catálogo local está vacío, forzamos carga completa desde servidor.
+    // Evita quedar "vacío para siempre" cuando existe lastPullAt pero no hay datos locales.
+    const forceFull =
+      state.plantillas.length === 0 ||
+      state.bibliotecaOtrosies.length === 0 ||
+      state.bibliotecaEscritos.length === 0 ||
+      state.bibliotecaParrafos.length === 0;
+    const since = forceFull ? "1970-01-01T00:00:00.000Z" : (st.lastPullAt || "1970-01-01T00:00:00.000Z");
 
     let plantillasChanged = 0;
     let otrosiesChanged = 0;
+    let escritosChanged = 0;
+    let parrafosChanged = 0;
 
     // Plantillas
     const pl = await apiFetch("/plantillas.php?since=" + encodeURIComponent(since));
@@ -1128,17 +1334,92 @@ const Sync = (() => {
     });
     if (otrosiesChanged) saveBiblioteca();
 
-    const pulledAt = (pl.server_time || ot.server_time || new Date().toISOString());
+    // Plantillas de escrito
+    const es = await apiFetch("/escritos.php?since=" + encodeURIComponent(since));
+    const eByIdLocal = new Map(state.bibliotecaEscritos.map(t => [t.id, t]));
+    (es.escritos || []).forEach(srv => {
+      if (srv.eliminadoEn) {
+        const before = state.bibliotecaEscritos.length;
+        state.bibliotecaEscritos = state.bibliotecaEscritos.filter(t => t.id !== srv.uuid);
+        if (state.bibliotecaEscritos.length !== before) escritosChanged++;
+      } else {
+        const local = eByIdLocal.get(srv.uuid);
+        const srvTs = Date.parse(srv.actualizadoEn || 0);
+        const locTs = local ? Date.parse(local.actualizadoEn || 0) : 0;
+        if (!local || srvTs > locTs) {
+          const merged = {
+            id: srv.uuid,
+            nombre: srv.nombre,
+            sumaPorDefecto: srv.sumaPorDefecto || "",
+            cuerpoPorDefecto: srv.cuerpoPorDefecto || "",
+            petitorioPorDefecto: srv.petitorioPorDefecto || "",
+            estructuraJson: Array.isArray(srv.estructuraJson) ? srv.estructuraJson : [],
+            usaDelegados: !!srv.usaDelegados,
+            creadoEn: srv.creadoEn,
+            actualizadoEn: srv.actualizadoEn
+          };
+          if (local) Object.assign(local, merged);
+          else state.bibliotecaEscritos.push(merged);
+          escritosChanged++;
+        }
+      }
+    });
+    if (escritosChanged) {
+      saveBibliotecaEscritos();
+      syncTiposDesdeBiblioteca();
+    }
+    if (otrosiesChanged || escritosChanged) {
+      dedupeBibliotecas();
+      saveBiblioteca();
+      saveBibliotecaEscritos();
+    }
+
+    // Párrafos
+    const pa = await apiFetch("/parrafos.php?since=" + encodeURIComponent(since));
+    const pByIdLocal = new Map(state.bibliotecaParrafos.map(p => [p.id, p]));
+    (pa.parrafos || []).forEach(srv => {
+      if (srv.eliminadoEn) {
+        const before = state.bibliotecaParrafos.length;
+        state.bibliotecaParrafos = state.bibliotecaParrafos.filter(p => p.id !== srv.uuid);
+        if (state.bibliotecaParrafos.length !== before) parrafosChanged++;
+      } else {
+        const local = pByIdLocal.get(srv.uuid);
+        const srvTs = Date.parse(srv.actualizadoEn || 0);
+        const locTs = local ? Date.parse(local.actualizadoEn || 0) : 0;
+        if (!local || srvTs > locTs) {
+          const merged = {
+            id: srv.uuid,
+            nombre: srv.nombre || "",
+            contenido: srv.contenido || "",
+            creadoEn: srv.creadoEn,
+            actualizadoEn: srv.actualizadoEn
+          };
+          if (local) Object.assign(local, merged);
+          else state.bibliotecaParrafos.push(merged);
+          parrafosChanged++;
+        }
+      }
+    });
+    if (parrafosChanged) saveBibliotecaParrafos();
+
+    const pulledAt = (pl.server_time || ot.server_time || es.server_time || pa.server_time || new Date().toISOString());
     setState({ lastPullAt: pulledAt, lastError: null });
     notifyStatus();
-    const changed = (plantillasChanged + otrosiesChanged) > 0;
+    const changed = (plantillasChanged + otrosiesChanged + escritosChanged + parrafosChanged) > 0;
     if (changed) {
       try {
-        const ev = new CustomEvent("sync-pulled", { detail: { plantillas: plantillasChanged, otrosies: otrosiesChanged } });
+        const ev = new CustomEvent("sync-pulled", { detail: { plantillas: plantillasChanged, otrosies: otrosiesChanged, escritos: escritosChanged, parrafos: parrafosChanged } });
         window.dispatchEvent(ev);
       } catch (e) { /* noop */ }
     }
-    return { pulled: (pl.plantillas || []).length + (ot.otrosies || []).length, changed, plantillasChanged, otrosiesChanged };
+    return {
+      pulled: (pl.plantillas || []).length + (ot.otrosies || []).length + (es.escritos || []).length + (pa.parrafos || []).length,
+      changed,
+      plantillasChanged,
+      otrosiesChanged,
+      escritosChanged,
+      parrafosChanged
+    };
   }
 
   async function syncNow() {
@@ -1196,6 +1477,8 @@ const Sync = (() => {
     getPending, getState, getStatusSummary,
     onPlantillaUpsert, onPlantillaDelete,
     onOtrosiUpsert, onOtrosiDelete,
+    onEscritoUpsert, onEscritoDelete,
+    onParrafoUpsert, onParrafoDelete,
     flush, pull, syncNow, testConnection,
     startAuto, stopAuto, notifyStatus
   };
@@ -1244,6 +1527,213 @@ function escapeHtml(s) {
   return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 function nl2br(s) { return escapeHtml(s).replace(/\n/g,"<br/>"); }
+function rich2br(s) { return String(s||"").replace(/\n/g,"<br/>"); }
+function safeTextarea(s) { return String(s||"").replace(/<\/textarea/gi, "&lt;/textarea"); }
+function extractBracketTokens(s) {
+  const out = [];
+  const re = /\[[^\]\r\n]+\]/g;
+  const txt = String(s || "");
+  let m;
+  while ((m = re.exec(txt)) !== null) {
+    const tok = m[0].trim();
+    if (!tok) continue;
+    if (tok.toUpperCase() === "[PETITORIO]") continue;
+    out.push(tok);
+  }
+  return out;
+}
+function stripHtml(s) {
+  return String(s || "").replace(/<[^>]+>/g, " ");
+}
+function tokenToLabel(token) {
+  return token.replace(/^\[|\]$/g, "").toUpperCase();
+}
+function variableFieldId(sourceId, index) {
+  return `${sourceId}::${index}`;
+}
+const PALABRAS_RECURRENTES_DEFAULT = [
+  "DEMANDADO",
+  "DEMANDANTE",
+  "DEMANDADA",
+  "DEMANDADO PRINCIPAL",
+  "DEMANDADO SOLIDARIO",
+  "RUT DEMANDADO PRINCIPAL",
+  "RUT DEMANDADO SOLIDARIO",
+  "REPRESENTANTE LEGAL DEMANDADO PRINCIPAL",
+  "REPRESENTANTE LEGAL DEMANDADO SOLIDARIO",
+  "REMUNERACIÓN 172",
+  "FECHA DE INICIO RELACIÓN LABORAL",
+  "FECHA DE TÉRMINO RELACIÓN LABORAL"
+];
+let PALABRAS_RECURRENTES = [...PALABRAS_RECURRENTES_DEFAULT];
+function normalizeRecurrentWord(s) {
+  return String(s || "").replace(/\s+/g, " ").trim().toUpperCase();
+}
+function parsePalabrasRecurrentesTxt(txt) {
+  return String(txt || "")
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean)
+    .filter(l => !/^#/.test(l))
+    .filter(l => !/^PALABRAS\s+RECURRENTES/i.test(l))
+    .map(l => l.replace(/^[\-\*\u2022]\s*/, ""))
+    .map(normalizeRecurrentWord)
+    .filter(Boolean);
+}
+async function loadPalabrasRecurrentes() {
+  try {
+    const resp = await fetch("palabras_recurrentes.txt", { cache: "no-store" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const txt = await resp.text();
+    const parsed = parsePalabrasRecurrentesTxt(txt);
+    PALABRAS_RECURRENTES = parsed.length ? parsed : [...PALABRAS_RECURRENTES_DEFAULT];
+  } catch (err) {
+    PALABRAS_RECURRENTES = [...PALABRAS_RECURRENTES_DEFAULT];
+    console.warn("No se pudo leer palabras_recurrentes.txt, usando lista por defecto.", err);
+  }
+}
+function isTokenRecurrent(token) {
+  const inner = tokenToLabel(token);
+  return PALABRAS_RECURRENTES.some(w => normalizeRecurrentWord(w) === normalizeRecurrentWord(inner));
+}
+function resolveVariableId(sourceId, index, token) {
+  if (isTokenRecurrent(token)) return `recurrente::${normalizeRecurrentWord(tokenToLabel(token))}`;
+  return variableFieldId(sourceId || "global", index);
+}
+function applyVariablesToHtml(html, sourceId) {
+  let out = String(html || "");
+  let i = 0;
+  out = out.replace(/\[[^\]\r\n]+\]/g, (tok) => {
+    i++;
+    if (tok.toUpperCase() === "[PETITORIO]") return tok;
+    const id = resolveVariableId(sourceId || "global", i, tok);
+    const richValue = String((state.camposVariables || {})[id] || "");
+    return richValue || tok;
+  });
+  return out;
+}
+function applyVariablesToText(text, sourceId) {
+  let out = String(text || "");
+  let i = 0;
+  out = out.replace(/\[[^\]\r\n]+\]/g, (tok) => {
+    i++;
+    if (tok.toUpperCase() === "[PETITORIO]") return tok;
+    const id = resolveVariableId(sourceId || "global", i, tok);
+    const richValue = String((state.camposVariables || {})[id] || "");
+    const replacement = richValue ? stripHtml(richValue).replace(/\s+/g, " ").trim() : tok;
+    return replacement;
+  });
+  return out;
+}
+function normalizeLibText(s) {
+  return String(s || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+function dedupeBibliotecas() {
+  const seenOtrosies = new Set();
+  state.bibliotecaOtrosies = state.bibliotecaOtrosies.filter(o => {
+    const key = normalizeLibText(o.titulo) + "||" + normalizeLibText(o.contenido);
+    if (seenOtrosies.has(key)) return false;
+    seenOtrosies.add(key);
+    return true;
+  });
+  const seenEscritos = new Set();
+  state.bibliotecaEscritos = state.bibliotecaEscritos.filter(t => {
+    const key = [
+      normalizeLibText(t.nombre),
+      normalizeLibText(t.sumaPorDefecto),
+      normalizeLibText(t.cuerpoPorDefecto),
+      normalizeLibText(t.petitorioPorDefecto)
+    ].join("||");
+    if (seenEscritos.has(key)) return false;
+    seenEscritos.add(key);
+    return true;
+  });
+}
+function dedupeParrafos() {
+  const seenIds = new Set();
+  const seenContent = new Set();
+  state.bibliotecaParrafos = state.bibliotecaParrafos.filter(p => {
+    if (!p || !p.id) return false;
+    if (seenIds.has(p.id)) return false;
+    const key = normalizeLibText(p.nombre) + "||" + normalizeLibText(p.contenido);
+    if (seenContent.has(key)) return false;
+    seenIds.add(p.id);
+    seenContent.add(key);
+    return true;
+  });
+}
+function applyFormatToEditor(editor, cmd) {
+  if (!editor) return;
+  editor.focus();
+  if (cmd === "bold") return document.execCommand("bold");
+  if (cmd === "italic") return document.execCommand("italic");
+  if (cmd === "underline") return document.execCommand("underline");
+  if (cmd === "indent") return document.execCommand("indent");
+  if (cmd === "linebreak") return document.execCommand("insertLineBreak");
+}
+function bindRichShortcuts(editor, onChange) {
+  if (!editor) return;
+  editor.addEventListener("keydown", e => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod) return;
+    const k = String(e.key || "").toLowerCase();
+    if (k === "b") { e.preventDefault(); document.execCommand("bold"); onChange && onChange(); }
+    if (k === "i") { e.preventDefault(); document.execCommand("italic"); onChange && onChange(); }
+    if (k === "u") { e.preventDefault(); document.execCommand("underline"); onChange && onChange(); }
+  });
+}
+function sanitizePastedHtml(html) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = String(html || "");
+  function wrapIf(flag, open, close, content) {
+    return flag ? (open + content + close) : content;
+  }
+  function walk(node) {
+    if (!node) return "";
+    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.textContent || "");
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+    const tag = node.tagName.toLowerCase();
+    const children = Array.from(node.childNodes).map(walk).join("");
+    if (tag === "br") return "<br>";
+    if (tag === "strong" || tag === "b") return "<strong>" + children + "</strong>";
+    if (tag === "em" || tag === "i") return "<em>" + children + "</em>";
+    if (tag === "u") return "<u>" + children + "</u>";
+    if (tag === "p" || tag === "div") return "<div>" + children + "</div>";
+    if (tag === "span") {
+      const cls = (node.getAttribute("class") || "").toLowerCase();
+      const style = (node.getAttribute("style") || "").toLowerCase();
+      const isBold = /\bbold\b/.test(cls) || /font-weight\s*:\s*(bold|[6-9]00)/.test(style);
+      const isItalic = /\bitalic\b/.test(cls) || /font-style\s*:\s*italic/.test(style);
+      const isUnderline = /\buline\b/.test(cls) || /text-decoration[^;]*underline/.test(style);
+      let out = children;
+      out = wrapIf(isBold, "<strong>", "</strong>", out);
+      out = wrapIf(isItalic, "<em>", "</em>", out);
+      out = wrapIf(isUnderline, "<u>", "</u>", out);
+      return out;
+    }
+    // Cualquier otra etiqueta se "aplana": conserva solo el texto/descendientes permitidos.
+    return children;
+  }
+  return Array.from(tmp.childNodes).map(walk).join("");
+}
+function bindRichPaste(editor, onChange) {
+  if (!editor) return;
+  editor.addEventListener("paste", e => {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const html = cd.getData("text/html");
+    const text = cd.getData("text/plain");
+    if (!html && !text) return;
+    e.preventDefault();
+    const sanitized = html ? sanitizePastedHtml(html) : escapeHtml(text).replace(/\n/g, "<br>");
+    document.execCommand("insertHTML", false, sanitized);
+    onChange && onChange();
+  });
+}
 function joinNames(arr) {
   if (arr.length === 0) return "";
   if (arr.length === 1) return arr[0];
@@ -1463,15 +1953,27 @@ const state = {
   plantillas: [],
   plantillaSeleccionadaId: null,
   bibliotecaOtrosies: [],
+  bibliotecaEscritos: [],
+  bibliotecaParrafos: [],
+  bibliotecaModulos: [],
+  moduloSeleccionadoId: "",
+  parrafoSeleccionadoId: "",
+  modulosEscritoActual: [],
+  moduloSeleccionadoIdx: null,
 
   // campos actuales
-  tipoEscritoId: "delega-poder",
+  tipoEscritoId: "generico",
   tribunal: "",
   materia: "",
   caratula: "",
   tipoCausa: "RIT",
   numeroCausa: "",
   parte: "demandada",
+  modalidadComparecencia: "mero-tramite",
+  clienteNombre: "",
+  clienteProfesion: "",
+  clienteRut: "",
+  comparecenciaDomicilio: "",
   delegantes: [ { nombre:"", genero:"M" } ],
   delegados:  [ { nombre:"", rut:"", genero:"M", domicilio:"" } ],
 
@@ -1481,18 +1983,96 @@ const state = {
   cuerpoCustom: false,
   petitorio: "",
   petitorioCustom: false,
-  otrosies: [] // [{id, titulo, contenido}]
+  otrosies: [], // [{id, titulo, contenido}]
+  camposVariables: {}
 };
 
 // =============== PERSISTENCE ===============
 function loadFromStorage() {
-  try { state.plantillas = JSON.parse(localStorage.getItem(LS.plantillas) || "[]"); }
-  catch (e) { state.plantillas = []; }
-  try { state.bibliotecaOtrosies = JSON.parse(localStorage.getItem(LS.biblioteca) || "[]"); }
-  catch (e) { state.bibliotecaOtrosies = []; }
+  // Catálogos se cargan desde cPanel vía sincronización.
+  state.plantillas = [];
+  state.bibliotecaOtrosies = [];
+  state.bibliotecaEscritos = [];
+  try { state.bibliotecaParrafos = JSON.parse(localStorage.getItem(LS.bibliotecaParrafos) || "[]") || []; }
+  catch (e) { state.bibliotecaParrafos = []; }
+  try { state.bibliotecaModulos = JSON.parse(localStorage.getItem(LS.bibliotecaModulos) || "[]") || []; }
+  catch (e) { state.bibliotecaModulos = []; }
 }
 function savePlantillas()  { localStorage.setItem(LS.plantillas, JSON.stringify(state.plantillas)); }
 function saveBiblioteca()  { localStorage.setItem(LS.biblioteca, JSON.stringify(state.bibliotecaOtrosies)); }
+function saveBibliotecaEscritos() { localStorage.setItem(LS.bibliotecaEscritos, JSON.stringify(state.bibliotecaEscritos)); }
+function saveBibliotecaParrafos() { localStorage.setItem(LS.bibliotecaParrafos, JSON.stringify(state.bibliotecaParrafos)); }
+function saveBibliotecaModulos() { localStorage.setItem(LS.bibliotecaModulos, JSON.stringify(state.bibliotecaModulos)); }
+
+function parseModulosDocxHtml(html) {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  const mods = [];
+  let actual = null;
+  Array.from(doc.body.children).forEach(el => {
+    const tag = (el.tagName || "").toLowerCase();
+    if (tag === "h1" || tag === "h2") {
+      if (actual && actual.contenido.trim()) mods.push(actual);
+      actual = { id: "moddocx-" + uuid(), nombre: (el.textContent || "Módulo").trim(), contenido: "" };
+      return;
+    }
+    if (!actual) return;
+    actual.contenido += (actual.contenido ? "" : "") + el.outerHTML;
+  });
+  if (actual && actual.contenido.trim()) mods.push(actual);
+  return mods;
+}
+
+async function loadModulosDesdeDocx() {
+  try {
+    const resp = await fetch("modulos_biblioteca.docx", { cache: "no-store" });
+    if (!resp.ok) return;
+    const arrayBuffer = await resp.arrayBuffer();
+    if (!window.mammoth) return;
+    const result = await window.mammoth.convertToHtml(
+      { arrayBuffer },
+      { styleMap: ["u => u"] }
+    );
+    const parsed = parseModulosDocxHtml(result.value || "");
+    if (!parsed.length) return;
+    const byName = new Map(state.bibliotecaModulos.map(m => [String(m.nombre || "").trim().toLowerCase(), m]));
+    parsed.forEach(m => {
+      const k = String(m.nombre || "").trim().toLowerCase();
+      if (byName.has(k)) byName.get(k).contenido = m.contenido;
+      else state.bibliotecaModulos.push(m);
+    });
+    saveBibliotecaModulos();
+  } catch (_) {}
+}
+
+function buildTipoDesdeBiblioteca(item) {
+  return {
+    id: item.id,
+    nombre: item.nombre,
+    sumaPorDefecto: item.sumaPorDefecto || "",
+    usaDelegados: !!item.usaDelegados,
+    estructurado: false,
+    petitorioPorDefecto: () => item.petitorioPorDefecto || "",
+    cuerpoPorDefecto: () => item.cuerpoPorDefecto || "",
+    estructuraJson: Array.isArray(item.estructuraJson) ? item.estructuraJson : [],
+    esPlantillaGuardada: true
+  };
+}
+
+function syncTiposDesdeBiblioteca() {
+  for (let i = TIPOS.length - 1; i >= 0; i--) {
+    if (TIPOS[i].esPlantillaGuardada) TIPOS.splice(i, 1);
+  }
+  const seenIds = new Set(TIPOS.map(t => t.id));
+  state.bibliotecaEscritos.forEach(item => {
+    if (!item || !item.id) return;
+    if (seenIds.has(item.id)) return;
+    TIPOS.push(buildTipoDesdeBiblioteca(item));
+    seenIds.add(item.id);
+  });
+  if (!TIPOS.some(t => t.id === state.tipoEscritoId)) {
+    state.tipoEscritoId = TIPOS.some(t => t.id === "generico") ? "generico" : TIPOS[0].id;
+  }
+}
 
 // Auto-name template from ROL + carátula
 function nombrePlantillaAuto(enc) {
@@ -1509,9 +2089,36 @@ function capturarEncabezadoActual() {
     tipoCausa: state.tipoCausa,
     numeroCausa: state.numeroCausa,
     parte: state.parte,
+    modalidadComparecencia: state.modalidadComparecencia,
+    clienteNombre: state.clienteNombre,
+    clienteProfesion: state.clienteProfesion,
+    clienteRut: state.clienteRut,
+    comparecenciaDomicilio: state.comparecenciaDomicilio,
     delegantes: JSON.parse(JSON.stringify(state.delegantes)),
     delegados:  JSON.parse(JSON.stringify(state.delegados))
   };
+}
+
+function encabezadoCompletoParaGuardar(enc) {
+  const firmantes = (enc.delegantes || []).filter(p => (p.nombre || "").trim());
+  return !!(
+    (enc.tribunal || "").trim() &&
+    (enc.materia || "").trim() &&
+    (enc.caratula || "").trim() &&
+    (enc.numeroCausa || "").trim() &&
+    (enc.parte || "").trim() &&
+    firmantes.length
+  );
+}
+
+function updateGuardarPlantillaUI() {
+  const btn = document.getElementById("btnGuardarPlantilla");
+  if (!btn) return;
+  const ok = encabezadoCompletoParaGuardar(capturarEncabezadoActual());
+  btn.disabled = !ok;
+  btn.title = ok
+    ? "Guardar plantilla de causa"
+    : "Complete tribunal, materia, carátula, RIT/ROL, parte y al menos un firmante para guardar.";
 }
 
 function aplicarEncabezadoAlState(enc) {
@@ -1521,6 +2128,11 @@ function aplicarEncabezadoAlState(enc) {
   state.tipoCausa   = enc.tipoCausa || "RIT";
   state.numeroCausa = enc.numeroCausa || "";
   state.parte       = enc.parte || "demandada";
+  state.modalidadComparecencia = enc.modalidadComparecencia || "mero-tramite";
+  state.clienteNombre = enc.clienteNombre || "";
+  state.clienteProfesion = enc.clienteProfesion || "";
+  state.clienteRut = enc.clienteRut || "";
+  state.comparecenciaDomicilio = enc.comparecenciaDomicilio || "";
   state.delegantes  = (enc.delegantes && enc.delegantes.length) ? enc.delegantes : [ { nombre:"", genero:"M" } ];
   // Asegurar forma consistente de delegados (agrega domicilio:"" si falta, para compatibilidad hacia atrás).
   if (enc.delegados && enc.delegados.length) {
@@ -1541,24 +2153,36 @@ function renderAll() {
   renderDelegantes();
   renderDelegadosIfNeeded();
   renderSumaBody();
+  renderModuloSelector();
+  renderModulosEscrito();
+  renderCamposVariables();
+  renderParrafosBiblioteca();
   renderOtrosies();
+  updateGuardarPlantillaUI();
   updatePreview();
 }
 
 function renderTipoSelector() {
   const sel = document.getElementById("tipoEscrito");
-  if (sel.options.length === 0) {
-    for (const t of TIPOS) {
-      const opt = document.createElement("option");
-      opt.value = t.id; opt.textContent = t.nombre;
-      sel.appendChild(opt);
-    }
+  sel.innerHTML = "";
+  const seenIds = new Set();
+  const tiposUnicos = TIPOS.filter(t => {
+    if (!t || !t.id) return false;
+    if (seenIds.has(t.id)) return false;
+    seenIds.add(t.id);
+    return true;
+  });
+  for (const t of tiposUnicos) {
+    const opt = document.createElement("option");
+    opt.value = t.id; opt.textContent = t.nombre;
+    sel.appendChild(opt);
   }
   sel.value = state.tipoEscritoId;
   // Ajustar visibilidad de delegados, textarea de cuerpo
   const tipo = tipoById(state.tipoEscritoId);
   document.getElementById("delegadosSection").style.display = tipo.usaDelegados ? "" : "none";
   document.getElementById("cuerpoTextareaWrap").style.display = tipo.estructurado ? "none" : "";
+  document.getElementById("cuerpoFormatBar").style.display = tipo.estructurado ? "none" : "flex";
   document.getElementById("cuerpoNotaEstructurado").style.display = tipo.estructurado ? "" : "none";
 }
 
@@ -1587,9 +2211,51 @@ function renderEncabezadoFields() {
   setVal("tipoCausa", state.tipoCausa);
   setVal("numeroCausa", state.numeroCausa);
   setVal("parte", state.parte);
+  setVal("modalidadComparecencia", state.modalidadComparecencia);
+  setVal("clienteNombre", state.clienteNombre);
+  setVal("clienteProfesion", state.clienteProfesion);
+  setVal("clienteRut", state.clienteRut);
+  setVal("comparecenciaDomicilio", state.comparecenciaDomicilio);
+  applyComparecenciaModeUI();
+}
+
+function applyComparecenciaModeUI() {
+  const modo = state.modalidadComparecencia || "mero-tramite";
+  const usaPlantilla = (modo === "mero-tramite");
+  const ocultaDatosCausa = (modo === "con-patrocinio-poder" || modo === "con-mandato-judicial");
+  const extras = document.getElementById("comparecenciaExtras");
+  if (extras) extras.style.display = usaPlantilla ? "none" : "";
+  ["fieldMateria","fieldCaratula","fieldParte","fieldRitRol"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = ocultaDatosCausa ? "none" : "";
+  });
+  const bloqueDelegante = document.getElementById("sectionDeleganteComparece");
+  if (bloqueDelegante) bloqueDelegante.style.display = ocultaDatosCausa ? "none" : "";
+  const bloquePlantilla = document.getElementById("plantillaCausaActions");
+  if (bloquePlantilla) bloquePlantilla.style.display = usaPlantilla ? "" : "none";
+  ["plantillaSelector","btnGuardarPlantilla","btnDuplicarPlantilla","btnEliminarPlantilla"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !usaPlantilla;
+  });
+  if (!usaPlantilla) state.plantillaSeleccionadaId = null;
+  renderPlantillaSelector();
 }
 
 function renderDelegantes() {
+  const sugeridos = [
+    "Carlos Patricio C. Gorroño Vega",
+    "José Manuel A. Gorroño Vega",
+    "Ignacio Esteban Jara Álvarez"
+  ];
+  const buildSugeridosOptions = (currentName) => {
+    const cur = (currentName || "").trim();
+    const base = [`<option value="">Sugerir abogado…</option>`];
+    sugeridos.forEach(nombre => {
+      const selected = (cur && cur === nombre) ? "selected" : "";
+      base.push(`<option value="${escapeHtml(nombre)}" ${selected}>${escapeHtml(nombre)}</option>`);
+    });
+    return base.join("");
+  };
   const wrap = document.getElementById("delegantesList");
   wrap.innerHTML = "";
   state.delegantes.forEach((p, i) => {
@@ -1601,7 +2267,10 @@ function renderDelegantes() {
         ${state.delegantes.length > 1 ? `<button type="button" class="remove" data-i="${i}" data-kind="delegante">Eliminar</button>` : ""}
       </div>
       <div class="row">
-        <input type="text" class="d-nombre" data-i="${i}" data-kind="delegante" value="${escapeHtml(p.nombre)}" placeholder="Nombre completo">
+        <select class="d-sugerido-abogado" data-i="${i}" data-kind="delegante" title="Seleccione un abogado sugerido (opcional)">
+          ${buildSugeridosOptions(p.nombre)}
+        </select>
+        <input type="text" class="d-nombre" data-i="${i}" data-kind="delegante" value="${escapeHtml(p.nombre)}" placeholder="Nombre completo (editable)">
         <select class="d-genero" data-i="${i}" data-kind="delegante">
           <option value="M" ${p.genero==="M"?"selected":""}>Masculino</option>
           <option value="F" ${p.genero==="F"?"selected":""}>Femenino</option>
@@ -1651,10 +2320,13 @@ function renderSumaBody() {
   setVal("petitorio", state.petitorio);
   const tipo = tipoById(state.tipoEscritoId);
   const ta = document.getElementById("cuerpoPrincipal");
+  const ed = document.getElementById("cuerpoPrincipalEditor");
   if (tipo.estructurado) {
-    ta.value = ""; // no se usa
+    ta.value = "";
+    ed.innerHTML = "";
   } else {
     ta.value = state.cuerpoPrincipal;
+    ed.innerHTML = state.cuerpoPrincipal || "";
   }
 }
 
@@ -1678,9 +2350,236 @@ function renderOtrosies() {
         <input type="text" class="o-titulo" data-i="${i}" value="${escapeHtml(o.titulo)}" placeholder="Título / suma del otrosí (ej.: Acompaña documentos)">
       </div>
       <div class="field" style="margin-bottom:0;">
-        <textarea class="o-contenido prose" data-i="${i}" rows="3" placeholder="Contenido del otrosí…">${escapeHtml(o.contenido)}</textarea>
+        <div class="format-bar">
+          <button type="button" class="btn small" data-format-otrosi="bold" data-i="${i}"><b>N</b></button>
+          <button type="button" class="btn small" data-format-otrosi="italic" data-i="${i}"><i>I</i></button>
+          <button type="button" class="btn small" data-format-otrosi="underline" data-i="${i}"><u>S</u></button>
+          <button type="button" class="btn small" data-format-otrosi="indent" data-i="${i}">Sangría</button>
+          <button type="button" class="btn small" data-format-otrosi="linebreak" data-i="${i}">↵</button>
+        </div>
+        <div class="o-contenido-editor rich-editor prose" style="min-height:90px;" contenteditable="true" data-i="${i}" data-placeholder="Contenido del otrosí…">${o.contenido||""}</div>
       </div>`;
     wrap.appendChild(card);
+  });
+}
+
+function detectTokensActuales() {
+  const tipo = tipoById(state.tipoEscritoId);
+  const sources = [
+    { id: "suma", text: state.sumaPrincipal || tipo.sumaPorDefecto || "" },
+    { id: "comparecencia", text: `${state.materia||""} ${state.caratula||""} ${state.numeroCausa||""}` },
+    { id: "petitorio", text: state.petitorio || tipo.petitorioPorDefecto(state) || "" }
+  ];
+  if (!state.modulosEscritoActual.length) {
+    sources.push({ id: "cuerpo", text: tipo.estructurado ? String(tipo.generarCuerpoHtml(state) || "") : String(state.cuerpoPrincipal || "") });
+  }
+  state.otrosies.forEach((o, i) => {
+    sources.push({ id: `otrosiTitulo:${i}`, text: o.titulo || "" });
+    sources.push({ id: `otrosiContenido:${i}`, text: o.contenido || "" });
+  });
+
+  const occurrences = [];
+  const tokenCounts = {};
+  const seenRecurrentIds = new Set();
+  sources.forEach(src => {
+    const matches = extractBracketTokens(stripHtml(src.text));
+    matches.forEach((tok, idx) => {
+      const tokenKey = normalizeRecurrentWord(tokenToLabel(tok));
+      tokenCounts[tokenKey] = (tokenCounts[tokenKey] || 0) + 1;
+      const id = resolveVariableId(src.id, idx + 1, tok);
+      if (id.startsWith("recurrente::") && seenRecurrentIds.has(id)) return;
+      if (id.startsWith("recurrente::")) seenRecurrentIds.add(id);
+      occurrences.push({
+        id,
+        sourceId: src.id,
+        token: tok,
+        serial: tokenCounts[tokenKey],
+        recurrente: id.startsWith("recurrente::")
+      });
+    });
+  });
+  return occurrences;
+}
+
+function detectTokensModulo(modIndex) {
+  const mod = state.modulosEscritoActual[modIndex];
+  if (!mod) return [];
+  const contenido = getModuloContenidoByItem(mod);
+  if (!contenido) return [];
+  const matches = extractBracketTokens(stripHtml(contenido));
+  const occurrences = [];
+  const tokenCounts = {};
+  const seenRecurrentIds = new Set();
+  matches.forEach((tok, idx) => {
+    const tokenKey = normalizeRecurrentWord(tokenToLabel(tok));
+    tokenCounts[tokenKey] = (tokenCounts[tokenKey] || 0) + 1;
+    const id = resolveVariableId(`modulo:${modIndex}`, idx + 1, tok);
+    if (id.startsWith("recurrente::") && seenRecurrentIds.has(id)) return;
+    if (id.startsWith("recurrente::")) seenRecurrentIds.add(id);
+    occurrences.push({
+      id,
+      token: tok,
+      serial: tokenCounts[tokenKey],
+      recurrente: id.startsWith("recurrente::")
+    });
+  });
+  return occurrences;
+}
+
+function renderCamposVariables() {
+  const title = document.getElementById("camposVarsTitle");
+  const wrap = document.getElementById("camposVariablesWrap");
+  if (!title || !wrap) return;
+
+  if (state.modulosEscritoActual.length) {
+    title.style.display = "none";
+    wrap.innerHTML = "";
+    return;
+  }
+
+  const occurrences = detectTokensActuales();
+  occurrences.forEach(o => { if (state.camposVariables[o.id] == null) state.camposVariables[o.id] = ""; });
+  title.textContent = "Campos variables detectados";
+  title.style.display = occurrences.length ? "" : "none";
+  wrap.innerHTML = "";
+  if (!occurrences.length) return;
+
+  occurrences.forEach(o => {
+    const value = state.camposVariables[o.id] || "";
+    const label = o.recurrente ? tokenToLabel(o.token) : `${tokenToLabel(o.token)} ${o.serial}`;
+    const card = document.createElement("div");
+    card.className = "field";
+    card.style.marginBottom = "8px";
+    card.innerHTML = `
+      <label>${escapeHtml(label)}</label>
+      <div class="format-bar">
+        <button type="button" class="btn small" data-format-campo="bold" data-var-id="${escapeHtml(o.id)}"><b>N</b></button>
+        <button type="button" class="btn small" data-format-campo="italic" data-var-id="${escapeHtml(o.id)}"><i>I</i></button>
+        <button type="button" class="btn small" data-format-campo="underline" data-var-id="${escapeHtml(o.id)}"><u>S</u></button>
+        <button type="button" class="btn small" data-format-campo="indent" data-var-id="${escapeHtml(o.id)}">Sangría</button>
+        <button type="button" class="btn small" data-format-campo="linebreak" data-var-id="${escapeHtml(o.id)}">↵</button>
+      </div>
+      <div class="o-contenido-editor rich-editor prose campo-var-editor" style="min-height:70px;" contenteditable="true" data-var-id="${escapeHtml(o.id)}" data-placeholder="Valor para ${escapeHtml(o.token)}…">${value}</div>
+    `;
+    wrap.appendChild(card);
+  });
+}
+function ensureCamposVariablesRendered() {
+  const a = detectTokensActuales().map(x => x.id);
+  const b = Object.keys(state.camposVariables || {});
+  if (a.length !== b.length) { renderCamposVariables(); return; }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) { renderCamposVariables(); return; }
+  }
+}
+
+function renderParrafosBiblioteca() {
+  dedupeParrafos();
+  saveBibliotecaParrafos();
+  const sel = document.getElementById("parrafoSelector");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = "";
+  o0.textContent = "— Seleccione un párrafo guardado —";
+  sel.appendChild(o0);
+  state.bibliotecaParrafos
+    .slice()
+    .sort((a,b) => (b.actualizadoEn||"").localeCompare(a.actualizadoEn||""))
+    .forEach(p => {
+      const o = document.createElement("option");
+      o.value = p.id;
+      o.textContent = p.nombre || "Sin nombre";
+      if (p.id === state.parrafoSeleccionadoId) o.selected = true;
+      sel.appendChild(o);
+    });
+}
+
+function renderModuloSelector() {
+  const sel = document.getElementById("moduloSelector");
+  if (!sel) return;
+  if (!state.moduloSeleccionadoId && state.bibliotecaModulos.length) state.moduloSeleccionadoId = state.bibliotecaModulos[0].id;
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = "";
+  o0.textContent = "— Seleccione un módulo de la biblioteca DOCX —";
+  sel.appendChild(o0);
+  state.bibliotecaModulos.forEach(m => {
+    const o = document.createElement("option");
+    o.value = m.id;
+    o.textContent = m.nombre || "Módulo sin nombre";
+    if (m.id === state.moduloSeleccionadoId) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+function getModuloContenidoByItem(m) {
+  if (!m) return "";
+  if (m.tipo === "modulo_txt") {
+    const mod = state.bibliotecaModulos.find(x => x.id === m.moduloId);
+    return mod ? (mod.contenido || "") : "";
+  }
+  // compatibilidad hacia atrás: módulos antiguos por referencia a párrafo
+  if (m.tipo === "parrafo_ref") {
+    const p = state.bibliotecaParrafos.find(x => x.id === m.parrafoId);
+    return p ? (p.contenido || "") : "";
+  }
+  return "";
+}
+
+function recomputeCuerpoFromModulos() {
+  const blocks = (state.modulosEscritoActual || []).map(m => {
+    const contenido = getModuloContenidoByItem(m);
+    if (!contenido) return `<div><span class="bold">[MÓDULO ELIMINADO]</span></div>`;
+    return `<div style="font-family:Tahoma; font-size:11pt; line-height:1.5;">${contenido}</div>`;
+  }).filter(Boolean);
+  if (!blocks.length) return;
+  state.cuerpoPrincipal = blocks.join("<br>");
+  state.cuerpoCustom = true;
+  const ed = document.getElementById("cuerpoPrincipalEditor");
+  if (ed) ed.innerHTML = state.cuerpoPrincipal;
+}
+
+function renderModulosEscrito() {
+  const wrap = document.getElementById("modulosEscritoList");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!state.modulosEscritoActual.length) {
+    state.moduloSeleccionadoIdx = null;
+    wrap.innerHTML = `<p style="color:var(--muted); font-size:12px;">Sin módulos aún. Agregue párrafos para componer una plantilla modular.</p>`;
+    return;
+  }
+  if (state.moduloSeleccionadoIdx == null || state.moduloSeleccionadoIdx >= state.modulosEscritoActual.length) {
+    state.moduloSeleccionadoIdx = 0;
+  }
+  state.modulosEscritoActual.forEach((m, i) => {
+    const nombre = m.tipo === "modulo_txt"
+      ? ((state.bibliotecaModulos.find(x => x.id === m.moduloId) || {}).nombre || "[MÓDULO ELIMINADO]")
+      : ((state.bibliotecaParrafos.find(x => x.id === m.parrafoId) || {}).nombre || "[PÁRRAFO ELIMINADO]");
+    const row = document.createElement("div");
+    row.className = "lib-item";
+    if (i === state.moduloSeleccionadoIdx) row.style.borderColor = "var(--primary)";
+    const selected = i === state.moduloSeleccionadoIdx;
+    const tokens = selected ? detectTokensModulo(i) : [];
+    row.innerHTML = `
+      <div class="title" style="cursor:pointer;" data-mod-toggle="${i}">Módulo ${i+1}: ${escapeHtml(nombre)}</div>
+      <div class="actions-row">
+        <button type="button" class="btn small" data-mod-toggle="${i}">${selected ? "Contraer" : "Campos [ ]"}</button>
+        <button type="button" class="btn small" data-mod-up="${i}" ${i===0?"disabled":""}>▲</button>
+        <button type="button" class="btn small" data-mod-down="${i}" ${i===state.modulosEscritoActual.length-1?"disabled":""}>▼</button>
+        <button type="button" class="btn small danger" data-mod-del="${i}">Quitar</button>
+      </div>
+      ${selected ? `
+      <div style="margin-top:8px;">
+        ${tokens.length ? tokens.map(o => {
+          const label = o.recurrente ? tokenToLabel(o.token) : `${tokenToLabel(o.token)} ${o.serial}`;
+          return `<div class="field" style="margin-bottom:6px;">
+            <label>${escapeHtml(label)}</label>
+            <input type="text" data-mod-var-id="${escapeHtml(o.id)}" value="${escapeHtml(state.camposVariables[o.id] || "")}" placeholder="Valor para ${escapeHtml(o.token)}">
+          </div>`;
+        }).join("") : `<p style="color:var(--muted); font-size:12px; margin:0;">Este módulo no contiene campos [ ]</p>`}
+      </div>` : ""}`;
+    wrap.appendChild(row);
   });
 }
 
@@ -1690,43 +2589,67 @@ function buildSumaLineHtml() {
   const principal = (state.sumaPrincipal || tipo.sumaPorDefecto || "Asunto principal").trim();
   // Si no hay otrosíes: sin "EN LO PRINCIPAL"; título en MAYÚSCULAS, negrita y subrayado.
   if (!state.otrosies || state.otrosies.length === 0) {
-    return `<span class="bold uline" style="font-weight:bold; text-decoration:underline;">${escapeHtml(principal.toUpperCase())}</span>.`;
+    return applyVariablesToHtml(`<span class="bold uline" style="font-weight:bold; text-decoration:underline;">${escapeHtml(principal.toUpperCase())}</span>.`, "suma");
   }
   const partes = [ `<span class="bold" style="font-weight:bold;">EN LO PRINCIPAL:</span> ${escapeHtml(principal)}` ];
   state.otrosies.forEach((o, i) => {
     partes.push(`<span class="bold" style="font-weight:bold;">${ordinalOtrosi(i+1)}:</span> ${escapeHtml((o.titulo||"").trim() || "[título del otrosí]")}`);
   });
-  return partes.join("; ") + ".";
+  return applyVariablesToHtml(partes.join("; ") + ".", "suma");
 }
 
 function buildComparecenciaHtml() {
+  const modo = state.modalidadComparecencia || "mero-tramite";
   const d = concordanciaDelegantes(state.delegantes);
+  if (modo === "con-patrocinio-poder") {
+    const cliente = escapeHtml((state.clienteNombre || "").trim() || "[CLIENTE]");
+    const profesion = escapeHtml((state.clienteProfesion || "").trim() || "[PROFESIÓN/OFICIO]");
+    const rut = escapeHtml((state.clienteRut || "").trim() || "[NÚMERO DE RUT]");
+    const domicilio = escapeHtml((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]");
+    return applyVariablesToHtml(`<span class="bold">${cliente}</span>, ${profesion}, RUT ${rut}, domiciliado para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:`, "comparecencia");
+  }
+  if (modo === "con-mandato-judicial") {
+    const cliente = escapeHtml((state.clienteNombre || "").trim() || "[CLIENTE]");
+    const domicilio = escapeHtml((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]");
+    return applyVariablesToHtml(`<span class="bold">${d.nombresHtml || "[ABOGADO/A O ABOGADOS/AS]"}</span>, abogado, en representación de ${cliente}, según se acreditará, todos domiciliados para estos efectos en ${domicilio}, a S.S., respetuosamente, digo:`, "comparecencia");
+  }
+  if (modo === "con-patrocinio-poder-causa-iniciada") {
+    const cliente = escapeHtml((state.clienteNombre || "").trim() || "[CLIENTE]");
+    const profesion = escapeHtml((state.clienteProfesion || "").trim() || "[PROFESIÓN/OFICIO]");
+    const rut = escapeHtml((state.clienteRut || "").trim() || "[NÚMERO DE RUT]");
+    const domicilio = escapeHtml((state.comparecenciaDomicilio || "").trim() || "[DOMICILIO]");
+    const materia  = escapeHtml((state.materia||"").trim() || "[MATERIA]");
+    const caratula = escapeHtml(((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase());
+    const tipo     = escapeHtml(state.tipoCausa);
+    const numero   = escapeHtml((state.numeroCausa||"").trim() || "[NÚMERO]");
+    return applyVariablesToHtml(`<span class="bold">${cliente}</span>, ${profesion}, RUT ${rut}, domiciliado para estos efectos en ${domicilio}, en autos sobre ${materia}, caratulada <span class="bold">&ldquo;${caratula}&rdquo;</span>, Causa <span class="bold">${tipo}</span> <span class="bold">${numero}</span>, a S.S., respetuosamente, digo:`, "comparecencia");
+  }
   const materia  = escapeHtml((state.materia||"").trim() || "[MATERIA]");
   const caratula = escapeHtml(((state.caratula||"").trim() || "[CARÁTULA]").toUpperCase());
   const tipo     = escapeHtml(state.tipoCausa);
   const numero   = escapeHtml((state.numeroCausa||"").trim() || "[NÚMERO]");
   const parte    = escapeHtml((state.parte||"").trim() || "demandada");
-  return `${d.nombresHtml}, ${d.profesion}, por la parte ${parte}, en autos sobre ${materia}, caratulada <span class="bold">&ldquo;${caratula}&rdquo;</span>, Causa <span class="bold">${tipo}</span> <span class="bold">${numero}</span>, a S.S., respetuosamente, ${d.digo}:`;
+  return applyVariablesToHtml(`${d.nombresHtml}, ${d.profesion}, por la parte ${parte}, en autos sobre ${materia}, caratulada <span class="bold">&ldquo;${caratula}&rdquo;</span>, Causa <span class="bold">${tipo}</span> <span class="bold">${numero}</span>, a S.S., respetuosamente, ${d.digo}:`, "comparecencia");
 }
 
 function buildCuerpoPrincipalHtml() {
   const tipo = tipoById(state.tipoEscritoId);
   if (tipo.estructurado) {
-    return tipo.generarCuerpoHtml(state);
+    return applyVariablesToHtml(tipo.generarCuerpoHtml(state), "cuerpo");
   }
-  return nl2br(state.cuerpoPrincipal || "");
+  return applyVariablesToHtml(rich2br(state.cuerpoPrincipal || ""), "cuerpo");
 }
 
 function buildPetitorioHtml() {
   const tipo = tipoById(state.tipoEscritoId);
   const pet = (state.petitorio || tipo.petitorioPorDefecto(state) || "").trim();
-  return escapeHtml(pet);
+  return applyVariablesToHtml(escapeHtml(pet), "petitorio");
 }
 
 function buildOtrosiesHtml() {
   return state.otrosies.map((o, i) => {
-    const titulo = escapeHtml((o.titulo||"").trim() || "[TÍTULO]");
-    const contenido = nl2br(o.contenido || "");
+    const titulo = applyVariablesToHtml(escapeHtml((o.titulo||"").trim() || "[TÍTULO]"), `otrosiTitulo:${i}`);
+    const contenido = applyVariablesToHtml(rich2br(o.contenido || ""), `otrosiContenido:${i}`);
     return `<p class="indent"><span class="bold">${ordinalOtrosi(i+1)}:</span> <span class="otrosi-title">${titulo}.</span> ${contenido}</p>`;
   }).join("");
 }
@@ -1739,11 +2662,14 @@ function updatePreview() {
   document.getElementById("pv_cuerpo").innerHTML = buildCuerpoPrincipalHtml();
   document.getElementById("pv_petitorio").innerHTML = buildPetitorioHtml();
   document.getElementById("pv_otrosies").innerHTML = buildOtrosiesHtml();
+  ensureCamposVariablesRendered();
+  document.getElementById("pv_cuerpo").setAttribute("contenteditable", tipo.estructurado ? "false" : "true");
 
   // Placeholder del textarea refleja el tipo
-  document.getElementById("cuerpoPrincipal").placeholder = tipo.estructurado ? "" : "Redacte el cuerpo del escrito…";
+  document.getElementById("cuerpoPrincipalEditor").setAttribute("data-placeholder", tipo.estructurado ? "" : "Redacte el cuerpo del escrito…");
   document.getElementById("sumaPrincipal").placeholder = tipo.sumaPorDefecto || "Ej.: Solicita lo que indica";
   document.getElementById("petitorio").placeholder = tipo.petitorioPorDefecto(state);
+  updateGuardarPlantillaUI();
 }
 
 // =============== EXPORT (Copy / DOCX) ===============
@@ -1771,7 +2697,7 @@ function buildExportHtml(includeLogos) {
   const petitorio = buildPetitorioHtml();
   const otrosiesArr = state.otrosies.map((o, i) => {
     const titulo = escapeHtml((o.titulo||"").trim() || "[TÍTULO]");
-    const contenido = nl2br(o.contenido || "");
+    const contenido = rich2br(o.contenido || "");
     return `<p style="${baseStyle} ${indent}"><b>${ordinalOtrosi(i+1)}:</b> <b>${titulo}.</b> ${contenido}</p>`;
   }).join("");
 
@@ -1800,6 +2726,13 @@ function showStatus(msg, kind) {
   setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3500);
 }
 
+function syncInstant() {
+  if (!Sync.isConfigured()) return;
+  Sync.syncNow()
+    .then(() => { renderAll(); renderSyncChip(); })
+    .catch(() => { renderSyncChip(); });
+}
+
 function checkRutsOrConfirm() {
   const tipo = tipoById(state.tipoEscritoId);
   if (!tipo.usaDelegados) return true;
@@ -1817,7 +2750,7 @@ function checkRutsOrConfirm() {
 
 // =============== EVENTS ===============
 function bindEncabezadoEvents() {
-  ["tribunal","materia","caratula","numeroCausa","parte"].forEach(id => {
+  ["tribunal","materia","caratula","numeroCausa","parte","clienteNombre","clienteProfesion","clienteRut","comparecenciaDomicilio"].forEach(id => {
     document.getElementById(id).addEventListener("input", e => {
       state[id] = e.target.value;
       updatePreview();
@@ -1825,6 +2758,11 @@ function bindEncabezadoEvents() {
   });
   document.getElementById("tipoCausa").addEventListener("change", e => {
     state.tipoCausa = e.target.value;
+    updatePreview();
+  });
+  document.getElementById("modalidadComparecencia").addEventListener("change", e => {
+    state.modalidadComparecencia = e.target.value;
+    applyComparecenciaModeUI();
     updatePreview();
   });
 }
@@ -1844,12 +2782,18 @@ function cambiarTipoEscrito(nuevoId) {
   if (!state.cuerpoCustom || nuevo.estructurado) {
     state.cuerpoPrincipal = nuevo.estructurado ? "" : (nuevo.cuerpoPorDefecto ? nuevo.cuerpoPorDefecto(state) : "");
     state.cuerpoCustom = false;
+    state.modulosEscritoActual = Array.isArray(nuevo.estructuraJson) ? JSON.parse(JSON.stringify(nuevo.estructuraJson)) : [];
+    state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? 0 : null;
+    if (state.modulosEscritoActual.length) recomputeCuerpoFromModulos();
   } else {
     // Preguntar si quiere descartar
     const ok = window.confirm("El cuerpo actual fue editado manualmente. ¿Desea reemplazarlo con la plantilla del nuevo tipo?");
     if (ok) {
       state.cuerpoPrincipal = nuevo.estructurado ? "" : (nuevo.cuerpoPorDefecto ? nuevo.cuerpoPorDefecto(state) : "");
       state.cuerpoCustom = false;
+      state.modulosEscritoActual = Array.isArray(nuevo.estructuraJson) ? JSON.parse(JSON.stringify(nuevo.estructuraJson)) : [];
+      state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? 0 : null;
+      if (state.modulosEscritoActual.length) recomputeCuerpoFromModulos();
     }
   }
 
@@ -1871,8 +2815,19 @@ function bindSumaBodyEvents() {
     state.sumaCustom = e.target.value.length > 0;
     updatePreview();
   });
-  document.getElementById("cuerpoPrincipal").addEventListener("input", e => {
-    state.cuerpoPrincipal = e.target.value;
+  const cuerpoEditor = document.getElementById("cuerpoPrincipalEditor");
+  cuerpoEditor.addEventListener("input", e => {
+    state.cuerpoPrincipal = e.target.innerHTML;
+    state.cuerpoCustom = true;
+    updatePreview();
+  });
+  bindRichShortcuts(cuerpoEditor, () => {
+    state.cuerpoPrincipal = cuerpoEditor.innerHTML;
+    state.cuerpoCustom = true;
+    updatePreview();
+  });
+  bindRichPaste(cuerpoEditor, () => {
+    state.cuerpoPrincipal = cuerpoEditor.innerHTML;
     state.cuerpoCustom = true;
     updatePreview();
   });
@@ -1893,6 +2848,317 @@ function bindSumaBodyEvents() {
     renderSumaBody();
     updatePreview();
     showStatus("Cuerpo y suma regenerados desde la plantilla del tipo.", "ok");
+  });
+  document.getElementById("cuerpoFormatBar").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-cmd]");
+    if (!btn) return;
+    applyFormatToEditor(cuerpoEditor, btn.dataset.cmd);
+    state.cuerpoPrincipal = cuerpoEditor.innerHTML;
+    state.cuerpoCustom = true;
+    updatePreview();
+  });
+}
+
+function bindPreviewEditEvents() {
+  const pvSuma = document.getElementById("pv_suma");
+  const pvTrib = document.getElementById("pv_tribunal");
+  const pvCuerpo = document.getElementById("pv_cuerpo");
+  const pvPet = document.getElementById("pv_petitorio");
+  if (!pvSuma || !pvTrib || !pvCuerpo || !pvPet) return;
+
+  pvSuma.addEventListener("blur", () => {
+    const txt = (pvSuma.innerText || "").replace(/\s+/g, " ").trim();
+    state.sumaPrincipal = txt;
+    state.sumaCustom = txt.length > 0;
+    setVal("sumaPrincipal", txt);
+    updatePreview();
+  });
+  pvTrib.addEventListener("blur", () => {
+    const txt = (pvTrib.innerText || "").replace(/\s+/g, " ").trim();
+    state.tribunal = txt;
+    setVal("tribunal", txt);
+    updatePreview();
+  });
+  pvPet.addEventListener("blur", () => {
+    const txt = (pvPet.innerText || "").replace(/\s+/g, " ").trim();
+    state.petitorio = txt;
+    state.petitorioCustom = txt.length > 0;
+    setVal("petitorio", txt);
+    updatePreview();
+  });
+  pvCuerpo.addEventListener("blur", () => {
+    const tipo = tipoById(state.tipoEscritoId);
+    if (tipo.estructurado) {
+      showStatus("Este tipo de escrito tiene cuerpo estructurado y no se edita desde la vista previa.", "err");
+      updatePreview();
+      return;
+    }
+    state.cuerpoPrincipal = pvCuerpo.innerHTML;
+    state.cuerpoCustom = true;
+    const ed = document.getElementById("cuerpoPrincipalEditor");
+    if (ed) ed.innerHTML = state.cuerpoPrincipal;
+    updatePreview();
+  });
+}
+
+function bindCamposVariablesEvents() {
+  const wrap = document.getElementById("camposVariablesWrap");
+  if (!wrap) return;
+  wrap.addEventListener("input", e => {
+    const el = e.target;
+    if (!el.classList.contains("campo-var-editor")) return;
+    const varId = el.dataset.varId;
+    if (!varId) return;
+    state.camposVariables[varId] = el.innerHTML;
+    updatePreview();
+  });
+  wrap.addEventListener("focusin", e => {
+    const el = e.target;
+    if (!el.classList.contains("campo-var-editor")) return;
+    if (el.dataset.shortcutsBound === "1") return;
+    el.dataset.shortcutsBound = "1";
+    bindRichShortcuts(el, () => {
+      const varId = el.dataset.varId;
+      if (!varId) return;
+      state.camposVariables[varId] = el.innerHTML;
+      updatePreview();
+    });
+    bindRichPaste(el, () => {
+      const varId = el.dataset.varId;
+      if (!varId) return;
+      state.camposVariables[varId] = el.innerHTML;
+      updatePreview();
+    });
+  });
+  wrap.addEventListener("click", e => {
+    const btn = e.target.closest("button[data-format-campo]");
+    if (!btn) return;
+    const varId = btn.dataset.varId;
+    if (!varId) return;
+    const ed = wrap.querySelector(`.campo-var-editor[data-var-id="${CSS.escape(varId)}"]`);
+    applyFormatToEditor(ed, btn.dataset.formatCampo);
+    if (!ed) return;
+    state.camposVariables[varId] = ed.innerHTML;
+    updatePreview();
+  });
+}
+
+function insertParrafoEnCuerpo(p) {
+  if (!p) return false;
+  const tipo = tipoById(state.tipoEscritoId);
+  if (tipo.estructurado) {
+    showStatus("Este tipo de escrito usa cuerpo estructurado; cambie a un tipo editable para insertar párrafos.", "err");
+    return false;
+  }
+  const add = `<div>${p.contenido}</div>`;
+  state.cuerpoPrincipal = (state.cuerpoPrincipal || "").trim()
+    ? (state.cuerpoPrincipal + "<br>" + add)
+    : add;
+  state.cuerpoCustom = true;
+  const cuerpoEditor = document.getElementById("cuerpoPrincipalEditor");
+  if (cuerpoEditor) cuerpoEditor.innerHTML = state.cuerpoPrincipal;
+  updatePreview();
+  return true;
+}
+
+function bindParrafosEvents() {
+  const sel = document.getElementById("parrafoSelector");
+  const nombre = document.getElementById("parrafoNombre");
+  const ed = document.getElementById("parrafoEditor");
+  const btnGuardar = document.getElementById("btnGuardarParrafo");
+  const btnInsertar = document.getElementById("btnInsertarParrafo");
+  const btnEliminar = document.getElementById("btnEliminarParrafo");
+  const btnAddModulo = document.getElementById("btnAddModuloParrafo");
+  const moduloSel = document.getElementById("moduloSelector");
+  const modWrap = document.getElementById("modulosEscritoList");
+  if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar || !btnAddModulo || !modWrap || !moduloSel) return;
+
+  bindRichShortcuts(ed, () => {});
+  bindRichPaste(ed, () => {});
+
+  sel.addEventListener("change", () => {
+    state.parrafoSeleccionadoId = sel.value || "";
+    const p = state.bibliotecaParrafos.find(x => x.id === state.parrafoSeleccionadoId);
+    if (!p) { nombre.value = ""; ed.innerHTML = ""; return; }
+    nombre.value = p.nombre || "";
+    ed.innerHTML = p.contenido || "";
+  });
+
+  btnGuardar.addEventListener("click", () => {
+    const nom = (nombre.value || "").trim();
+    const contenido = (ed.innerHTML || "").trim();
+    if (!nom) { showStatus("Ingrese un nombre para el párrafo.", "err"); return; }
+    if (!contenido) { showStatus("Ingrese el contenido del párrafo.", "err"); return; }
+    const now = new Date().toISOString();
+    let item = state.bibliotecaParrafos.find(x => x.id === state.parrafoSeleccionadoId);
+    if (!item) {
+      item = { id: "parrafo-" + uuid(), creadoEn: now, actualizadoEn: now, nombre: nom, contenido };
+      state.bibliotecaParrafos.push(item);
+      state.parrafoSeleccionadoId = item.id;
+    } else {
+      item.nombre = nom;
+      item.contenido = contenido;
+      item.actualizadoEn = now;
+    }
+    saveBibliotecaParrafos();
+    Sync.onParrafoUpsert(item);
+    syncInstant();
+    renderParrafosBiblioteca();
+    showStatus("Párrafo guardado en biblioteca.", "ok");
+  });
+
+  btnInsertar.addEventListener("click", () => {
+    const p = state.bibliotecaParrafos.find(x => x.id === (sel.value || state.parrafoSeleccionadoId));
+    if (!p) { showStatus("Seleccione un párrafo para insertar.", "err"); return; }
+    if (insertParrafoEnCuerpo(p)) showStatus("Párrafo insertado en el cuerpo principal.", "ok");
+  });
+
+  btnEliminar.addEventListener("click", () => {
+    const id = sel.value || state.parrafoSeleccionadoId;
+    if (!id) { showStatus("Seleccione un párrafo para eliminar.", "err"); return; }
+    const p = state.bibliotecaParrafos.find(x => x.id === id);
+    if (!p) return;
+    if (!window.confirm(`¿Eliminar párrafo «${p.nombre}»?`)) return;
+    state.bibliotecaParrafos = state.bibliotecaParrafos.filter(x => x.id !== id);
+    state.parrafoSeleccionadoId = "";
+    nombre.value = "";
+    ed.innerHTML = "";
+    saveBibliotecaParrafos();
+    Sync.onParrafoDelete(id);
+    syncInstant();
+    renderParrafosBiblioteca();
+    showStatus("Párrafo eliminado.", "ok");
+  });
+
+  btnAddModulo.addEventListener("click", () => {
+    const mod = state.bibliotecaModulos.find(x => x.id === (moduloSel.value || state.moduloSeleccionadoId));
+    if (!mod) { showStatus("Seleccione un módulo de la biblioteca DOCX para insertar.", "err"); return; }
+    state.moduloSeleccionadoId = mod.id;
+    state.modulosEscritoActual.push({ tipo: "modulo_txt", moduloId: mod.id });
+    state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
+    recomputeCuerpoFromModulos();
+    renderModulosEscrito();
+    renderCamposVariables();
+    updatePreview();
+    showStatus("Módulo insertado en el escrito.", "ok");
+  });
+
+  moduloSel.addEventListener("change", () => {
+    state.moduloSeleccionadoId = moduloSel.value || "";
+  });
+
+  modWrap.addEventListener("click", e => {
+    const el = e.target;
+    if (el.dataset.modDel != null) {
+      const i = parseInt(el.dataset.modDel, 10);
+      state.modulosEscritoActual.splice(i, 1);
+      if (state.moduloSeleccionadoIdx != null) {
+        if (state.moduloSeleccionadoIdx === i) state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? Math.max(0, i-1) : null;
+        else if (state.moduloSeleccionadoIdx > i) state.moduloSeleccionadoIdx--;
+      }
+    } else if (el.dataset.modToggle != null) {
+      const i = parseInt(el.dataset.modToggle, 10);
+      state.moduloSeleccionadoIdx = i;
+    } else if (el.dataset.modUp != null) {
+      const i = parseInt(el.dataset.modUp, 10);
+      if (i > 0) {
+        [state.modulosEscritoActual[i-1], state.modulosEscritoActual[i]] = [state.modulosEscritoActual[i], state.modulosEscritoActual[i-1]];
+        if (state.moduloSeleccionadoIdx === i) state.moduloSeleccionadoIdx = i-1;
+        else if (state.moduloSeleccionadoIdx === i-1) state.moduloSeleccionadoIdx = i;
+      }
+    } else if (el.dataset.modDown != null) {
+      const i = parseInt(el.dataset.modDown, 10);
+      if (i < state.modulosEscritoActual.length - 1) {
+        [state.modulosEscritoActual[i+1], state.modulosEscritoActual[i]] = [state.modulosEscritoActual[i], state.modulosEscritoActual[i+1]];
+        if (state.moduloSeleccionadoIdx === i) state.moduloSeleccionadoIdx = i+1;
+        else if (state.moduloSeleccionadoIdx === i+1) state.moduloSeleccionadoIdx = i;
+      }
+    } else return;
+    recomputeCuerpoFromModulos();
+    renderModulosEscrito();
+    renderCamposVariables();
+    updatePreview();
+  });
+
+  modWrap.addEventListener("input", e => {
+    const el = e.target;
+    if (!el.dataset.modVarId) return;
+    state.camposVariables[el.dataset.modVarId] = el.value;
+    updatePreview();
+  });
+}
+
+function openBibliotecaParrafos() {
+  renderBibliotecaParrafos();
+  document.getElementById("modalParrafosBackdrop").classList.add("open");
+}
+function closeBibliotecaParrafos() {
+  document.getElementById("modalParrafosBackdrop").classList.remove("open");
+}
+function renderBibliotecaParrafos() {
+  dedupeParrafos();
+  const wrap = document.getElementById("bibliotecaParrafosList");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!state.bibliotecaParrafos.length) {
+    wrap.innerHTML = `<p style="color:var(--muted); font-size:13px;">No hay párrafos guardados todavía.</p>`;
+    return;
+  }
+  state.bibliotecaParrafos
+    .slice()
+    .sort((a,b) => (b.actualizadoEn||"").localeCompare(a.actualizadoEn||""))
+    .forEach((p, i) => {
+      const item = document.createElement("div");
+      item.className = "lib-item";
+      item.innerHTML = `
+        <div class="title">${escapeHtml(p.nombre || "Sin nombre")}</div>
+        <div class="content">${rich2br(p.contenido || "")}</div>
+        <div class="actions-row">
+          <button type="button" class="btn primary small" data-insert-parrafo="${i}">Insertar en el escrito</button>
+          <button type="button" class="btn small danger" data-del-parrafo="${i}">Eliminar</button>
+        </div>`;
+      wrap.appendChild(item);
+    });
+}
+function bindBibliotecaParrafosEvents() {
+  const openBtn = document.getElementById("openBibliotecaParrafos");
+  const closeBtn = document.getElementById("modalParrafosClose");
+  const backdrop = document.getElementById("modalParrafosBackdrop");
+  const list = document.getElementById("bibliotecaParrafosList");
+  if (!openBtn || !closeBtn || !backdrop || !list) return;
+  openBtn.addEventListener("click", openBibliotecaParrafos);
+  closeBtn.addEventListener("click", closeBibliotecaParrafos);
+  backdrop.addEventListener("click", e => {
+    if (e.target.id === "modalParrafosBackdrop") closeBibliotecaParrafos();
+  });
+  list.addEventListener("click", e => {
+    const el = e.target;
+    if (el.dataset.insertParrafo != null) {
+      const i = parseInt(el.dataset.insertParrafo, 10);
+      const p = state.bibliotecaParrafos
+        .slice()
+        .sort((a,b) => (b.actualizadoEn||"").localeCompare(a.actualizadoEn||""))[i];
+      if (!p) return;
+      if (insertParrafoEnCuerpo(p)) {
+        showStatus("Párrafo insertado en el cuerpo principal.", "ok");
+        closeBibliotecaParrafos();
+      }
+      return;
+    }
+    if (el.dataset.delParrafo != null) {
+      const i = parseInt(el.dataset.delParrafo, 10);
+      const p = state.bibliotecaParrafos
+        .slice()
+        .sort((a,b) => (b.actualizadoEn||"").localeCompare(a.actualizadoEn||""))[i];
+      if (!p) return;
+      if (!window.confirm(`¿Eliminar párrafo «${p.nombre}»?`)) return;
+      state.bibliotecaParrafos = state.bibliotecaParrafos.filter(x => x.id !== p.id);
+      saveBibliotecaParrafos();
+      Sync.onParrafoDelete(p.id);
+      syncInstant();
+      renderParrafosBiblioteca();
+      showStatus("Párrafo eliminado.", "ok");
+    }
   });
 }
 
@@ -1927,6 +3193,15 @@ function bindDelegantesEvents() {
     });
     wrap.addEventListener("change", e => {
       const el = e.target;
+      if (el.classList.contains("d-sugerido-abogado")) {
+        const kind = el.dataset.kind;
+        const i = parseInt(el.dataset.i, 10);
+        if (kind !== "delegante" || isNaN(i) || !el.value) return;
+        state.delegantes[i].nombre = el.value;
+        renderDelegantes();
+        updatePreview();
+        return;
+      }
       if (!el.classList.contains("d-genero")) return;
       const kind = el.dataset.kind;
       const i = parseInt(el.dataset.i, 10);
@@ -1971,8 +3246,26 @@ function bindOtrosiesEvents() {
     const i = parseInt(el.dataset.i, 10);
     if (isNaN(i)) return;
     if (el.classList.contains("o-titulo")) state.otrosies[i].titulo = el.value;
-    if (el.classList.contains("o-contenido")) state.otrosies[i].contenido = el.value;
+    if (el.classList.contains("o-contenido-editor")) state.otrosies[i].contenido = el.innerHTML;
     updatePreview();
+  });
+  wrap.addEventListener("focusin", e => {
+    const el = e.target;
+    if (!el.classList.contains("o-contenido-editor")) return;
+    if (el.dataset.shortcutsBound === "1") return;
+    el.dataset.shortcutsBound = "1";
+    bindRichShortcuts(el, () => {
+      const i = parseInt(el.dataset.i, 10);
+      if (isNaN(i)) return;
+      state.otrosies[i].contenido = el.innerHTML;
+      updatePreview();
+    });
+    bindRichPaste(el, () => {
+      const i = parseInt(el.dataset.i, 10);
+      if (isNaN(i)) return;
+      state.otrosies[i].contenido = el.innerHTML;
+      updatePreview();
+    });
   });
   wrap.addEventListener("click", e => {
     const el = e.target;
@@ -2001,9 +3294,21 @@ function bindOtrosiesEvents() {
       if (!(o.titulo||"").trim()) { showStatus("El otrosí debe tener título para guardarse en biblioteca.", "err"); return; }
       const nuevo = { id: uuid(), titulo: o.titulo, contenido: o.contenido, actualizadoEn: new Date().toISOString() };
       state.bibliotecaOtrosies.push(nuevo);
+      dedupeBibliotecas();
       saveBiblioteca();
       Sync.onOtrosiUpsert(nuevo);
+      syncInstant();
       showStatus("Otrosí guardado en biblioteca.", "ok");
+      return;
+    }
+    if (el.dataset.formatOtrosi != null) {
+      const i = parseInt(el.dataset.i, 10);
+      const ed = wrap.querySelector(`.o-contenido-editor[data-i="${i}"]`);
+      applyFormatToEditor(ed, el.dataset.formatOtrosi);
+      if (ed && !isNaN(i)) {
+        state.otrosies[i].contenido = ed.innerHTML;
+        updatePreview();
+      }
       return;
     }
   });
@@ -2019,6 +3324,11 @@ function bindOtrosiesEvents() {
 // =============== PLANTILLAS (encabezado) ===============
 function bindPlantillaEvents() {
   document.getElementById("plantillaSelector").addEventListener("change", e => {
+    if ((state.modalidadComparecencia || "mero-tramite") !== "mero-tramite") {
+      e.target.value = "";
+      showStatus("Las plantillas de causa solo aplican en modalidad «Mero trámite».", "err");
+      return;
+    }
     const id = e.target.value;
     if (!id) {
       state.plantillaSeleccionadaId = null;
@@ -2048,6 +3358,10 @@ function cargarPlantilla(id) {
 
 function guardarPlantilla() {
   const enc = capturarEncabezadoActual();
+  if (!encabezadoCompletoParaGuardar(enc)) {
+    showStatus("Complete los datos de la causa antes de guardar la plantilla.", "err");
+    return;
+  }
   const nombre = nombrePlantillaAuto(enc);
   if (state.plantillaSeleccionadaId) {
     // Actualizar existente
@@ -2058,6 +3372,7 @@ function guardarPlantilla() {
     p.actualizadoEn = new Date().toISOString();
     savePlantillas();
     Sync.onPlantillaUpsert(p);
+    syncInstant();
     renderPlantillaSelector();
     showStatus(`Plantilla actualizada: ${nombre}`, "ok");
   } else {
@@ -2068,6 +3383,7 @@ function guardarPlantilla() {
     state.plantillaSeleccionadaId = nueva.id;
     savePlantillas();
     Sync.onPlantillaUpsert(nueva);
+    syncInstant();
     renderPlantillaSelector();
     showStatus(`Plantilla creada: ${nombre}`, "ok");
   }
@@ -2089,6 +3405,7 @@ function duplicarPlantilla() {
   state.plantillaSeleccionadaId = copia.id;
   savePlantillas();
   Sync.onPlantillaUpsert(copia);
+  syncInstant();
   renderPlantillaSelector();
   showStatus(`Plantilla duplicada: ${copia.nombre}`, "ok");
 }
@@ -2103,6 +3420,7 @@ function eliminarPlantilla() {
   state.plantillaSeleccionadaId = null;
   savePlantillas();
   Sync.onPlantillaDelete(uuidEliminado);
+  syncInstant();
   renderPlantillaSelector();
   showStatus("Plantilla eliminada.", "ok");
 }
@@ -2112,7 +3430,9 @@ function exportarJSON() {
     version: "1.0",
     exportadoEn: new Date().toISOString(),
     plantillas: state.plantillas,
-    bibliotecaOtrosies: state.bibliotecaOtrosies
+    bibliotecaOtrosies: state.bibliotecaOtrosies,
+    bibliotecaEscritos: state.bibliotecaEscritos,
+    bibliotecaParrafos: state.bibliotecaParrafos
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -2134,6 +3454,8 @@ function importarJSON(e) {
       if (!data || typeof data !== "object") throw new Error("JSON inválido");
       const plantillasNuevas = Array.isArray(data.plantillas) ? data.plantillas : [];
       const bibNueva = Array.isArray(data.bibliotecaOtrosies) ? data.bibliotecaOtrosies : [];
+      const escritosNuevos = Array.isArray(data.bibliotecaEscritos) ? data.bibliotecaEscritos : [];
+      const parrafosNuevos = Array.isArray(data.bibliotecaParrafos) ? data.bibliotecaParrafos : [];
 
       const modo = window.prompt(
         "Importación:\n" +
@@ -2146,17 +3468,29 @@ function importarJSON(e) {
       if (modo.trim().toLowerCase() === "reemplazar") {
         state.plantillas = plantillasNuevas;
         state.bibliotecaOtrosies = bibNueva;
+        state.bibliotecaEscritos = escritosNuevos;
+        state.bibliotecaParrafos = parrafosNuevos;
       } else {
         // Fusionar por id
         const idsExistentes = new Set(state.plantillas.map(p => p.id));
         plantillasNuevas.forEach(p => { if (!idsExistentes.has(p.id)) state.plantillas.push(p); });
         const idsBib = new Set(state.bibliotecaOtrosies.map(b => b.id));
         bibNueva.forEach(b => { if (!idsBib.has(b.id)) state.bibliotecaOtrosies.push(b); });
+        const idsEscr = new Set(state.bibliotecaEscritos.map(t => t.id));
+        escritosNuevos.forEach(t => { if (!idsEscr.has(t.id)) state.bibliotecaEscritos.push(t); });
+        const idsPar = new Set(state.bibliotecaParrafos.map(p => p.id));
+        parrafosNuevos.forEach(p => { if (!idsPar.has(p.id)) state.bibliotecaParrafos.push(p); });
       }
       savePlantillas();
+      dedupeBibliotecas();
       saveBiblioteca();
+      saveBibliotecaEscritos();
+      saveBibliotecaParrafos();
+      syncTiposDesdeBiblioteca();
+      renderTipoSelector();
       renderPlantillaSelector();
-      showStatus(`Importadas ${plantillasNuevas.length} plantilla(s) y ${bibNueva.length} otrosí(es).`, "ok");
+      renderParrafosBiblioteca();
+      showStatus(`Importadas ${plantillasNuevas.length} plantilla(s), ${bibNueva.length} otrosí(es), ${escritosNuevos.length} plantilla(s) de escrito y ${parrafosNuevos.length} párrafo(s).`, "ok");
     } catch (err) {
       showStatus("Error al importar JSON: " + err.message, "err");
     } finally {
@@ -2168,6 +3502,7 @@ function importarJSON(e) {
 
 // =============== BIBLIOTECA DE OTROSÍES ===============
 function openBiblioteca() {
+  syncInstant();
   renderBiblioteca();
   document.getElementById("modalBackdrop").classList.add("open");
 }
@@ -2175,6 +3510,7 @@ function closeBiblioteca() {
   document.getElementById("modalBackdrop").classList.remove("open");
 }
 function renderBiblioteca() {
+  dedupeBibliotecas();
   const wrap = document.getElementById("bibliotecaList");
   wrap.innerHTML = "";
   if (!state.bibliotecaOtrosies.length) {
@@ -2186,7 +3522,7 @@ function renderBiblioteca() {
     item.className = "lib-item";
     item.innerHTML = `
       <div class="title">${escapeHtml(o.titulo)}</div>
-      <div class="content">${escapeHtml(o.contenido)}</div>
+      <div class="content">${rich2br(o.contenido)}</div>
       <div class="actions-row">
         <button type="button" class="btn primary small" data-insert="${i}">Insertar en el escrito</button>
         <button type="button" class="btn small danger" data-del-lib="${i}">Eliminar</button>
@@ -2218,7 +3554,109 @@ function bindBibliotecaEvents() {
       state.bibliotecaOtrosies.splice(i, 1);
       saveBiblioteca();
       Sync.onOtrosiDelete(uuidEliminado);
+      syncInstant();
       renderBiblioteca();
+    }
+  });
+}
+
+// =============== BIBLIOTECA DE ESCRITOS ===============
+function openBibliotecaEscritos() {
+  syncInstant();
+  renderBibliotecaEscritos();
+  document.getElementById("modalEscritosBackdrop").classList.add("open");
+}
+function closeBibliotecaEscritos() {
+  document.getElementById("modalEscritosBackdrop").classList.remove("open");
+}
+function renderBibliotecaEscritos() {
+  dedupeBibliotecas();
+  const wrap = document.getElementById("bibliotecaEscritosList");
+  wrap.innerHTML = "";
+  if (!state.bibliotecaEscritos.length) {
+    wrap.innerHTML = `<p style="color:var(--muted); font-size:13px;">No hay plantillas de escrito guardadas todavía.</p>`;
+    return;
+  }
+  state.bibliotecaEscritos.forEach((t, i) => {
+    const item = document.createElement("div");
+    item.className = "lib-item";
+    item.innerHTML = `
+      <div class="title">${escapeHtml(t.nombre)}</div>
+      <div class="content">Suma: ${escapeHtml(t.sumaPorDefecto || "—")} · Petitorio: ${escapeHtml(t.petitorioPorDefecto || "—")}</div>
+      <div class="actions-row">
+        <button type="button" class="btn primary small" data-use-written="${i}">Usar</button>
+        <button type="button" class="btn small danger" data-del-written="${i}">Eliminar</button>
+      </div>`;
+    wrap.appendChild(item);
+  });
+}
+
+function guardarTipoEscritoActual() {
+  const nombre = (window.prompt("Nombre de la plantilla de escrito:") || "").trim();
+  if (!nombre) { showStatus("Nombre obligatorio para guardar la plantilla de escrito.", "err"); return; }
+  const tipoActual = tipoById(state.tipoEscritoId);
+  const payload = {
+    nombre,
+    usaDelegados: !!tipoActual.usaDelegados,
+    sumaPorDefecto: (state.sumaPrincipal || "").trim(),
+    cuerpoPorDefecto: tipoActual.estructurado
+      ? String(tipoActual.generarCuerpoHtml(state) || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+      : (state.cuerpoPrincipal || "").trim(),
+    petitorioPorDefecto: (state.petitorio || "").trim(),
+    estructuraJson: JSON.parse(JSON.stringify(state.modulosEscritoActual || []))
+  };
+  const existente = state.bibliotecaEscritos.find(t =>
+    t.nombre.trim().toLowerCase() === payload.nombre.trim().toLowerCase()
+  );
+  const now = new Date().toISOString();
+  const modelo = existente
+    ? Object.assign(existente, payload, { actualizadoEn: now })
+    : Object.assign({ id: "tpl-escrito-" + uuid(), creadoEn: now, actualizadoEn: now }, payload);
+  if (!existente) state.bibliotecaEscritos.push(modelo);
+  dedupeBibliotecas();
+  saveBibliotecaEscritos();
+  Sync.onEscritoUpsert(modelo);
+  syncInstant();
+  syncTiposDesdeBiblioteca();
+  state.tipoEscritoId = modelo.id;
+  renderTipoSelector();
+  updatePreview();
+  showStatus(existente ? "Plantilla de escrito actualizada." : "Plantilla de escrito guardada y agregada al selector de tipo.", "ok");
+}
+
+function bindBibliotecaEscritosEvents() {
+  document.getElementById("btnGuardarTipoEscrito").addEventListener("click", guardarTipoEscritoActual);
+  document.getElementById("openBibliotecaEscritos").addEventListener("click", openBibliotecaEscritos);
+  document.getElementById("modalEscritosClose").addEventListener("click", closeBibliotecaEscritos);
+  document.getElementById("modalEscritosBackdrop").addEventListener("click", e => {
+    if (e.target.id === "modalEscritosBackdrop") closeBibliotecaEscritos();
+  });
+  document.getElementById("bibliotecaEscritosList").addEventListener("click", e => {
+    const el = e.target;
+    if (el.dataset.useWritten != null) {
+      const i = parseInt(el.dataset.useWritten, 10);
+      const item = state.bibliotecaEscritos[i];
+      if (!item) return;
+      cambiarTipoEscrito(item.id);
+      document.getElementById("tipoEscrito").value = item.id;
+      closeBibliotecaEscritos();
+      showStatus(`Plantilla aplicada: ${item.nombre}`, "ok");
+      return;
+    }
+    if (el.dataset.delWritten != null) {
+      const i = parseInt(el.dataset.delWritten, 10);
+      const item = state.bibliotecaEscritos[i];
+      if (!item) return;
+      if (!window.confirm(`¿Eliminar plantilla de escrito «${item.nombre}»?`)) return;
+      state.bibliotecaEscritos.splice(i, 1);
+      saveBibliotecaEscritos();
+      Sync.onEscritoDelete(item.id);
+      syncInstant();
+      syncTiposDesdeBiblioteca();
+      renderTipoSelector();
+      renderBibliotecaEscritos();
+      updatePreview();
+      showStatus("Plantilla de escrito eliminada.", "ok");
     }
   });
 }
@@ -2274,9 +3712,16 @@ function bindExportEvents() {
     if (!window.confirm("¿Limpiar todos los campos del formulario? (las plantillas guardadas se conservan)")) return;
     state.tribunal = ""; state.materia = ""; state.caratula = "";
     state.tipoCausa = "RIT"; state.numeroCausa = ""; state.parte = "demandada";
+    state.modalidadComparecencia = "mero-tramite";
+    state.clienteNombre = ""; state.clienteProfesion = "";
+    state.clienteRut = ""; state.comparecenciaDomicilio = "";
     state.delegantes = [ { nombre:"", genero:"M" } ];
     state.delegados  = [ { nombre:"", rut:"", genero:"M", domicilio:"" } ];
     state.otrosies = [];
+    state.modulosEscritoActual = [];
+    state.moduloSeleccionadoIdx = null;
+    state.moduloSeleccionadoId = state.bibliotecaModulos.length ? state.bibliotecaModulos[0].id : "";
+    state.camposVariables = {};
     state.sumaCustom = false; state.cuerpoCustom = false; state.petitorioCustom = false;
     state.plantillaSeleccionadaId = null;
     // Regenerar cuerpo/suma/petitorio para el tipo actual
@@ -2437,8 +3882,11 @@ function bindSyncEvents() {
 }
 
 // =============== INIT ===============
-function init() {
+async function init() {
+  await loadPalabrasRecurrentes();
   loadFromStorage();
+  await loadModulosDesdeDocx();
+  syncTiposDesdeBiblioteca();
   const t = tipoById(state.tipoEscritoId);
   state.sumaPrincipal = t.sumaPorDefecto || "";
   state.cuerpoPrincipal = t.estructurado ? "" : (t.cuerpoPorDefecto ? t.cuerpoPorDefecto(state) : "");
@@ -2449,8 +3897,13 @@ function init() {
   bindEncabezadoEvents();
   bindDelegantesEvents();
   bindSumaBodyEvents();
+  bindPreviewEditEvents();
+  bindCamposVariablesEvents();
+  bindParrafosEvents();
+  bindBibliotecaParrafosEvents();
   bindOtrosiesEvents();
   bindBibliotecaEvents();
+  bindBibliotecaEscritosEvents();
   bindExportEvents();
   bindSyncEvents();
 
@@ -2466,11 +3919,16 @@ function init() {
       if (sel.value !== seleccionadaActual) sel.value = ""; // la plantilla ya no existe
     }
     renderBiblioteca();
+    renderTipoSelector();
+    renderBibliotecaEscritos();
+    renderParrafosBiblioteca();
     updatePreview();
     const det = (ev && ev.detail) || {};
     const partes = [];
     if (det.plantillas) partes.push(det.plantillas + " plantilla" + (det.plantillas===1?"":"s"));
     if (det.otrosies)   partes.push(det.otrosies + " otrosí" + (det.otrosies===1?"":"es"));
+    if (det.escritos)   partes.push(det.escritos + " plantilla" + (det.escritos===1?"":"s") + " de escrito");
+    if (det.parrafos)   partes.push(det.parrafos + " párrafo" + (det.parrafos===1?"":"s"));
     if (partes.length) showStatus("Cambios recibidos del servidor: " + partes.join(" y ") + ".", "ok");
   });
 
