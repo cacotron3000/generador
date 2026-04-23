@@ -2596,6 +2596,24 @@ function renderOtrosies() {
   const wrap = document.getElementById("otrosiesList");
   wrap.innerHTML = "";
   state.otrosies.forEach((o, i) => {
+    const matches = extractBracketTokens(stripHtml(o.contenido || ""));
+    const tokens = [];
+    const tokenCounts = {};
+    const seenRecurrentIds = new Set();
+    matches.forEach((tok, idx) => {
+      const tokenKey = normalizeRecurrentWord(tokenToLabel(tok));
+      tokenCounts[tokenKey] = (tokenCounts[tokenKey] || 0) + 1;
+      const id = resolveVariableId(`otrosiContenido:${i}`, idx + 1, tok);
+      if (id.startsWith("recurrente::") && seenRecurrentIds.has(id)) return;
+      if (id.startsWith("recurrente::")) seenRecurrentIds.add(id);
+      tokens.push({
+        id,
+        token: tok,
+        serial: tokenCounts[tokenKey],
+        recurrente: id.startsWith("recurrente::")
+      });
+      if (state.camposVariables[id] == null) state.camposVariables[id] = "";
+    });
     const card = document.createElement("div");
     card.className = "otrosi-card";
     card.innerHTML = `
@@ -2620,6 +2638,20 @@ function renderOtrosies() {
           <button type="button" class="btn small" data-format-otrosi="linebreak" data-i="${i}">↵</button>
         </div>
         <div class="o-contenido-editor rich-editor prose" style="min-height:90px;" contenteditable="true" data-i="${i}" data-placeholder="Contenido del otrosí…">${o.contenido||""}</div>
+        <div style="margin-top:8px;">
+          ${tokens.length ? tokens.map(t => {
+            const label = t.recurrente ? tokenToLabel(t.token) : `${tokenToLabel(t.token)} ${t.serial}`;
+            const rutLike = isRutLikeToken(t.token);
+            const value = stripHtmlWithLineBreaks(state.camposVariables[t.id] || "");
+            return `<div class="field" style="margin-bottom:6px;">
+              <label>${escapeHtml(label)}</label>
+              <div class="${rutLike ? "rut-wrap" : ""}">
+                <input type="text" ${rutLike ? "maxlength='12'" : ""} data-otrosi-var-id="${escapeHtml(t.id)}" data-otrosi-var-rut="${rutLike ? "1" : "0"}" value="${escapeHtml(value)}" placeholder="Valor para ${escapeHtml(t.token)}">
+                ${rutLike ? `<div class="rut-msg"></div>` : ""}
+              </div>
+            </div>`;
+          }).join("") : `<p style="color:var(--muted); font-size:12px; margin:8px 0 0;">Este otrosí no contiene campos [ ]</p>`}
+        </div>
       </div>`;
     wrap.appendChild(card);
   });
@@ -2635,10 +2667,6 @@ function detectTokensActuales() {
   if (!state.modulosEscritoActual.length) {
     sources.push({ id: "cuerpo", text: tipo.estructurado ? String(tipo.generarCuerpoHtml(state) || "") : String(state.cuerpoPrincipal || "") });
   }
-  state.otrosies.forEach((o, i) => {
-    sources.push({ id: `otrosiTitulo:${i}`, text: o.titulo || "" });
-    sources.push({ id: `otrosiContenido:${i}`, text: o.contenido || "" });
-  });
 
   const occurrences = [];
   const tokenCounts = {};
@@ -3869,6 +3897,27 @@ function bindOtrosiesEvents() {
   const wrap = document.getElementById("otrosiesList");
   wrap.addEventListener("input", e => {
     const el = e.target;
+    if (el.dataset.otrosiVarId) {
+      const varId = el.dataset.otrosiVarId;
+      if (!varId) return;
+      if (el.dataset.otrosiVarRut === "1") {
+        const formatted = formatRut(el.value || "");
+        el.value = formatted;
+        state.camposVariables[varId] = escapeHtml(formatted);
+        const st = rutStatus(formatted);
+        const msg = el.parentElement && el.parentElement.querySelector(".rut-msg");
+        if (msg) {
+          msg.classList.remove("ok","err");
+          msg.textContent = st==="valid" ? "RUT válido." : (st==="invalid" ? "RUT inválido." : "");
+          if (st==="valid") msg.classList.add("ok");
+          if (st==="invalid") msg.classList.add("err");
+        }
+      } else {
+        state.camposVariables[varId] = escapeHtml(el.value || "");
+      }
+      updatePreview();
+      return;
+    }
     const i = parseInt(el.dataset.i, 10);
     if (isNaN(i)) return;
     if (el.classList.contains("o-titulo")) state.otrosies[i].titulo = el.value;
@@ -3892,6 +3941,15 @@ function bindOtrosiesEvents() {
       state.otrosies[i].contenido = el.innerHTML;
       updatePreview();
     });
+  });
+  wrap.addEventListener("focusout", e => {
+    const el = e.target;
+    if (!el.classList.contains("o-contenido-editor")) return;
+    const i = parseInt(el.dataset.i, 10);
+    if (isNaN(i)) return;
+    state.otrosies[i].contenido = el.innerHTML;
+    renderOtrosies();
+    updatePreview();
   });
   wrap.addEventListener("click", e => {
     const el = e.target;
