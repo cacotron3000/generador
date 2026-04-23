@@ -23,7 +23,7 @@ try {
             if (isset($_GET['uuid'])) {
                 $uuid = (string)$_GET['uuid'];
                 if (!is_uuid($uuid)) json_error(400, 'uuid inválido.');
-                $st = $pdo->prepare("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE uuid = ?");
+                $st = $pdo->prepare("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, estructura_json, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE uuid = ?");
                 $st->execute([$uuid]);
                 $row = $st->fetch();
                 if (!$row) json_error(404, 'No encontrada.');
@@ -32,12 +32,12 @@ try {
             if (isset($_GET['since'])) {
                 $since = parse_iso_to_datetime((string)$_GET['since']);
                 if ($since === null) json_error(400, 'since inválido (ISO 8601 UTC).');
-                $st = $pdo->prepare("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE actualizado_en >= ? ORDER BY actualizado_en ASC");
+                $st = $pdo->prepare("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, estructura_json, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE actualizado_en >= ? ORDER BY actualizado_en ASC");
                 $st->execute([$since]);
                 $rows = array_map('format_row', $st->fetchAll());
                 json_response(200, ['escritos' => $rows, 'server_time' => fmt_datetime_utc(gmdate('Y-m-d H:i:s.') . '000')]);
             }
-            $rows = $pdo->query("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE eliminado_en IS NULL ORDER BY actualizado_en DESC")->fetchAll();
+            $rows = $pdo->query("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, estructura_json, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE eliminado_en IS NULL ORDER BY actualizado_en DESC")->fetchAll();
             json_response(200, ['escritos' => array_map('format_row', $rows)]);
             break;
 
@@ -48,12 +48,13 @@ try {
             $suma = (string)($data['sumaPorDefecto'] ?? '');
             $cuerpo = (string)($data['cuerpoPorDefecto'] ?? '');
             $petitorio = (string)($data['petitorioPorDefecto'] ?? '');
+            $estructuraJson = encode_estructura_json($data['estructuraJson'] ?? []);
             $usaDelegados = !empty($data['usaDelegados']) ? 1 : 0;
             if ($nombre === '') json_error(400, 'Falta "nombre".');
 
             $st = $pdo->prepare("
-                INSERT INTO escritos_biblioteca (uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, usa_delegados)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO escritos_biblioteca (uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, estructura_json, usa_delegados)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                   nombre = VALUES(nombre),
                   titulo = CASE WHEN VALUES(titulo) <> '' THEN VALUES(titulo) ELSE titulo END,
@@ -61,12 +62,13 @@ try {
                   suma = VALUES(suma),
                   cuerpo = VALUES(cuerpo),
                   petitorio = VALUES(petitorio),
+                  estructura_json = VALUES(estructura_json),
                   usa_delegados = VALUES(usa_delegados),
                   eliminado_en = NULL
             ");
-            $st->execute([$uuid, $nombre, $nombre, $cuerpo, $suma, $cuerpo, $petitorio, $usaDelegados]);
+            $st->execute([$uuid, $nombre, $nombre, $cuerpo, $suma, $cuerpo, $petitorio, $estructuraJson, $usaDelegados]);
 
-            $st2 = $pdo->prepare("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE uuid = ?");
+            $st2 = $pdo->prepare("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, estructura_json, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE uuid = ?");
             $st2->execute([$uuid]);
             json_response(201, format_row($st2->fetch()));
             break;
@@ -86,6 +88,7 @@ try {
             if (isset($data['cuerpoPorDefecto'])) { $sets[] = 'cuerpo = ?'; $args[] = (string)$data['cuerpoPorDefecto']; }
             if (isset($data['cuerpoPorDefecto'])) { $sets[] = 'contenido = CASE WHEN ? <> "" THEN ? ELSE contenido END'; $args[] = (string)$data['cuerpoPorDefecto']; $args[] = (string)$data['cuerpoPorDefecto']; }
             if (isset($data['petitorioPorDefecto'])) { $sets[] = 'petitorio = ?'; $args[] = (string)$data['petitorioPorDefecto']; }
+            if (array_key_exists('estructuraJson', $data)) { $sets[] = 'estructura_json = ?'; $args[] = encode_estructura_json($data['estructuraJson']); }
             if (isset($data['usaDelegados'])) { $sets[] = 'usa_delegados = ?'; $args[] = !empty($data['usaDelegados']) ? 1 : 0; }
             if (!$sets) json_error(400, 'Nada que actualizar.');
             $args[] = $uuid;
@@ -96,7 +99,7 @@ try {
                 $chk->execute([$uuid]);
                 if (!$chk->fetchColumn()) json_error(404, 'No encontrada.');
             }
-            $st2 = $pdo->prepare("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE uuid = ?");
+            $st2 = $pdo->prepare("SELECT uuid, nombre, titulo, contenido, suma, cuerpo, petitorio, estructura_json, usa_delegados, creado_en, actualizado_en, eliminado_en FROM escritos_biblioteca WHERE uuid = ?");
             $st2->execute([$uuid]);
             json_response(200, format_row($st2->fetch()));
             break;
@@ -133,9 +136,26 @@ function format_row(array $row): array
         'sumaPorDefecto' => $row['suma'] ?? '',
         'cuerpoPorDefecto' => ($row['cuerpo'] ?? '') !== '' ? $row['cuerpo'] : ($row['contenido'] ?? ''),
         'petitorioPorDefecto' => $row['petitorio'] ?? '',
+        'estructuraJson' => decode_estructura_json($row['estructura_json'] ?? null),
         'usaDelegados' => (bool)($row['usa_delegados'] ?? 0),
         'creadoEn' => fmt_datetime_utc($row['creado_en']),
         'actualizadoEn' => fmt_datetime_utc($row['actualizado_en']),
         'eliminadoEn' => fmt_datetime_utc($row['eliminado_en']),
     ];
+}
+
+function encode_estructura_json($value): string
+{
+    if (!is_array($value)) $value = [];
+    $json = json_encode($value, JSON_UNESCAPED_UNICODE);
+    if ($json === false) return '[]';
+    return $json;
+}
+
+function decode_estructura_json($raw): array
+{
+    if ($raw === null || $raw === '') return [];
+    if (is_array($raw)) return $raw;
+    $arr = json_decode((string)$raw, true);
+    return is_array($arr) ? $arr : [];
 }
