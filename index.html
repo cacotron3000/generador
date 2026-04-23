@@ -2693,12 +2693,6 @@ function renderCamposVariables() {
   const wrap = document.getElementById("camposVariablesWrap");
   if (!title || !wrap) return;
 
-  if (state.modulosEscritoActual.length) {
-    title.style.display = "none";
-    wrap.innerHTML = "";
-    return;
-  }
-
   const occurrences = detectTokensActuales();
   occurrences.forEach(o => { if (state.camposVariables[o.id] == null) state.camposVariables[o.id] = ""; });
   title.textContent = "Campos variables detectados";
@@ -2710,6 +2704,7 @@ function renderCamposVariables() {
     const value = state.camposVariables[o.id] || "";
     const label = o.recurrente ? tokenToLabel(o.token) : `${tokenToLabel(o.token)} ${o.serial}`;
     const rutLike = isRutLikeToken(o.token);
+    const textoPlano = String(o.sourceId || "").startsWith("otrosiContenido:");
     const card = document.createElement("div");
     card.className = "field";
     card.style.marginBottom = "8px";
@@ -2718,7 +2713,9 @@ function renderCamposVariables() {
       <div class="rut-wrap">
         <input type="text" class="campo-var-input-rut" data-var-id="${escapeHtml(o.id)}" data-var-token="${escapeHtml(o.token)}" value="${escapeHtml(stripHtmlWithLineBreaks(value))}" placeholder="Valor para ${escapeHtml(o.token)}" maxlength="12">
         <div class="rut-msg"></div>
-      </div>` : `
+      </div>` : (textoPlano ? `
+      <label>${escapeHtml(label)}</label>
+      <input type="text" class="campo-var-input-text" data-var-id="${escapeHtml(o.id)}" data-var-token="${escapeHtml(o.token)}" value="${escapeHtml(stripHtmlWithLineBreaks(value))}" placeholder="Valor para ${escapeHtml(o.token)}">` : `
       <label>${escapeHtml(label)}</label>
       <div class="format-bar">
         <button type="button" class="btn small" data-format-campo="bold" data-var-id="${escapeHtml(o.id)}"><b>N</b></button>
@@ -2728,7 +2725,7 @@ function renderCamposVariables() {
         <button type="button" class="btn small" data-format-campo="linebreak" data-var-id="${escapeHtml(o.id)}">↵</button>
       </div>
       <div class="o-contenido-editor rich-editor prose campo-var-editor" style="min-height:70px;" contenteditable="true" data-var-id="${escapeHtml(o.id)}" data-placeholder="Valor para ${escapeHtml(o.token)}…">${value}</div>
-    `;
+    `);
     wrap.appendChild(card);
   });
 }
@@ -3294,6 +3291,13 @@ function bindCamposVariablesEvents() {
         if (st==="valid") msg.classList.add("ok");
         if (st==="invalid") msg.classList.add("err");
       }
+      updatePreview();
+      return;
+    }
+    if (el.classList.contains("campo-var-input-text")) {
+      const varId = el.dataset.varId;
+      if (!varId) return;
+      state.camposVariables[varId] = escapeHtml(el.value || "");
       updatePreview();
     }
   });
