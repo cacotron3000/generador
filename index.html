@@ -343,14 +343,17 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 
   <div class="panel modules-sidebar">
     <h2>Biblioteca de módulos</h2>
+    <div class="inner" style="padding-bottom:0;">
+      <div class="field" style="margin-bottom:8px;">
+        <label style="font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);">Buscar módulo</label>
+        <input type="text" id="sidebarModulosSearch" placeholder="Buscar módulo por nombre o contenido...">
+      </div>
+    </div>
     <div class="sidebar-tabs">
       <button type="button" class="sidebar-tab active">Módulos</button>
       <button type="button" class="sidebar-tab" id="openBibliotecaFromSidebar">Otrosíes</button>
     </div>
     <div class="inner">
-      <div class="field">
-        <input type="text" id="sidebarModulosSearch" placeholder="Buscar módulo...">
-      </div>
       <button type="button" class="btn small" id="btnCargarModulosDocxSidebar">Cargar plantilla (.txt/.docx)</button>
       <div id="sidebarModulosList" style="margin-top:10px;"></div>
     </div>
