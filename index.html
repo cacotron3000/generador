@@ -463,27 +463,29 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <div id="otrosiesList"></div>
     <button type="button" class="add-btn" id="addOtrosi">+ Agregar otrosí</button>
 
-    <h2 class="spaced">Biblioteca de párrafos
-      <span>
-        <button type="button" class="btn small" id="openBibliotecaParrafos">Biblioteca</button>
-      </span>
-    </h2>
-    <div class="field">
-      <label>Plantillas de párrafo guardadas</label>
-      <select id="parrafoSelector"></select>
-    </div>
-    <div class="field">
-      <label>Nombre del párrafo</label>
-      <input type="text" id="parrafoNombre" placeholder="Ej.: Hechos no controvertidos">
-    </div>
-    <div class="field">
-      <label>Contenido del párrafo</label>
-      <div id="parrafoEditor" class="rich-editor prose" contenteditable="true" data-placeholder="Escriba o pegue aquí un párrafo plantilla…"></div>
-    </div>
-    <div class="actions" style="margin-top:8px;">
-      <button type="button" class="btn small" id="btnGuardarParrafo">Guardar párrafo</button>
-      <button type="button" class="btn small" id="btnInsertarParrafo">Insertar en cuerpo</button>
-      <button type="button" class="btn small danger" id="btnEliminarParrafo">Eliminar párrafo</button>
+    <div id="parrafosSection" style="display:none;">
+      <h2 class="spaced">Biblioteca de párrafos
+        <span>
+          <button type="button" class="btn small" id="openBibliotecaParrafos">Biblioteca</button>
+        </span>
+      </h2>
+      <div class="field">
+        <label>Plantillas de párrafo guardadas</label>
+        <select id="parrafoSelector"></select>
+      </div>
+      <div class="field">
+        <label>Nombre del párrafo</label>
+        <input type="text" id="parrafoNombre" placeholder="Ej.: Hechos no controvertidos">
+      </div>
+      <div class="field">
+        <label>Contenido del párrafo</label>
+        <div id="parrafoEditor" class="rich-editor prose" contenteditable="true" data-placeholder="Escriba o pegue aquí un párrafo plantilla…"></div>
+      </div>
+      <div class="actions" style="margin-top:8px;">
+        <button type="button" class="btn small" id="btnGuardarParrafo">Guardar párrafo</button>
+        <button type="button" class="btn small" id="btnInsertarParrafo">Insertar en cuerpo</button>
+        <button type="button" class="btn small danger" id="btnEliminarParrafo">Eliminar párrafo</button>
+      </div>
     </div>
 
     <div class="actions">
@@ -545,7 +547,7 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 </div>
 
 <!-- Modal biblioteca de párrafos -->
-<div class="modal-backdrop" id="modalParrafosBackdrop">
+<div class="modal-backdrop" id="modalParrafosBackdrop" style="display:none;">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalParrafosTitle">
     <button class="close" id="modalParrafosClose" title="Cerrar">×</button>
     <h3 id="modalParrafosTitle">Biblioteca de párrafos</h3>
@@ -2236,7 +2238,6 @@ function renderAll() {
   renderSidebarModulos();
   renderModulosEscrito();
   renderCamposVariables();
-  renderParrafosBiblioteca();
   renderOtrosies();
   updateGuardarPlantillaUI();
   updatePreview();
@@ -2431,6 +2432,8 @@ function renderSumaBody() {
     ta.value = state.cuerpoPrincipal;
     ed.innerHTML = state.cuerpoPrincipal || "";
   }
+  renderModulosEscrito();
+  renderCamposVariables();
 }
 
 function renderOtrosies() {
@@ -4219,8 +4222,6 @@ async function init() {
   bindSumaBodyEvents();
   bindPreviewEditEvents();
   bindCamposVariablesEvents();
-  bindParrafosEvents();
-  bindBibliotecaParrafosEvents();
   bindBibliotecaModulosEvents();
   bindSidebarModulosEvents();
   bindOtrosiesEvents();
