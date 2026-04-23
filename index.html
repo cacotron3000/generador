@@ -1455,6 +1455,10 @@ const Sync = (() => {
     // Compatibilidad: además leer otrosíes antiguos almacenados en modulos.
     const moAll = await apiFetch("/modulos.php?since=" + encodeURIComponent(since));
     const otLegacy = (moAll.modulos || []).filter(x => isOtrosiModuloNombre(x && x.nombre));
+    const hasOtrosiesDedicados = (ot.otrosies || []).some(x => !x.eliminadoEn);
+    const otLegacyFallback = (!hasOtrosiesDedicados && !otLegacy.length)
+      ? (moAll.modulos || [])
+      : [];
     const bByIdLocal = new Map(state.bibliotecaOtrosies.map(o => [o.id, o]));
     const otrosiesRemotos = []
       .concat(ot.otrosies || [])
@@ -1462,6 +1466,14 @@ const Sync = (() => {
         uuid: x.uuid,
         titulo: fromOtrosiModuloNombre(x.nombre),
         contenido: fromOtrosiModuloContenido(x.contenido),
+        creadoEn: x.creadoEn,
+        actualizadoEn: x.actualizadoEn,
+        eliminadoEn: x.eliminadoEn
+      })))
+      .concat(otLegacyFallback.map(x => ({
+        uuid: x.uuid,
+        titulo: x.nombre || "",
+        contenido: x.contenido || "",
         creadoEn: x.creadoEn,
         actualizadoEn: x.actualizadoEn,
         eliminadoEn: x.eliminadoEn
