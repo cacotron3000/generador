@@ -2637,7 +2637,6 @@ function renderOtrosies() {
           <button type="button" class="btn small" data-format-otrosi="indent" data-i="${i}">Sangría</button>
           <button type="button" class="btn small" data-format-otrosi="linebreak" data-i="${i}">↵</button>
         </div>
-        <div class="o-contenido-editor rich-editor prose" style="min-height:90px;" contenteditable="true" data-i="${i}" data-placeholder="Contenido del otrosí…">${o.contenido||""}</div>
         <div style="margin-top:8px;">
           ${tokens.length ? tokens.map(t => {
             const label = t.recurrente ? tokenToLabel(t.token) : `${tokenToLabel(t.token)} ${t.serial}`;
@@ -2652,6 +2651,7 @@ function renderOtrosies() {
             </div>`;
           }).join("") : `<p style="color:var(--muted); font-size:12px; margin:8px 0 0;">Este otrosí no contiene campos [ ]</p>`}
         </div>
+        <div class="o-contenido-editor rich-editor prose" style="min-height:90px;" contenteditable="true" data-i="${i}" data-placeholder="Contenido del otrosí…">${o.contenido||""}</div>
       </div>`;
     wrap.appendChild(card);
   });
