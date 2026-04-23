@@ -63,6 +63,21 @@ CREATE TABLE IF NOT EXISTS parrafos_biblioteca (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
+-- Biblioteca de módulos DOCX (módulos reutilizables para composición de escrito)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS modulos (
+  uuid            CHAR(36)            NOT NULL,
+  nombre          VARCHAR(190)        NOT NULL,
+  contenido       MEDIUMTEXT          NOT NULL,
+  creado_en       DATETIME(3)         NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  actualizado_en  DATETIME(3)         NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  eliminado_en    DATETIME(3)         NULL DEFAULT NULL,
+  PRIMARY KEY (uuid),
+  KEY idx_modulos_actualizado_en (actualizado_en),
+  KEY idx_modulos_eliminado_en (eliminado_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
 -- Migración para instalaciones existentes (evita errores por columnas faltantes)
 -- ----------------------------------------------------------------------------
 ALTER TABLE escritos_biblioteca
@@ -78,6 +93,13 @@ ALTER TABLE escritos_biblioteca
   ADD COLUMN IF NOT EXISTS eliminado_en  DATETIME(3) NULL DEFAULT NULL;
 
 ALTER TABLE parrafos_biblioteca
+  ADD COLUMN IF NOT EXISTS nombre         VARCHAR(190) NOT NULL,
+  ADD COLUMN IF NOT EXISTS contenido      MEDIUMTEXT NOT NULL,
+  ADD COLUMN IF NOT EXISTS creado_en      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS actualizado_en DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS eliminado_en   DATETIME(3) NULL DEFAULT NULL;
+
+ALTER TABLE modulos
   ADD COLUMN IF NOT EXISTS nombre         VARCHAR(190) NOT NULL,
   ADD COLUMN IF NOT EXISTS contenido      MEDIUMTEXT NOT NULL,
   ADD COLUMN IF NOT EXISTS creado_en      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
