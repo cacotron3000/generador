@@ -378,8 +378,9 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <h2 class="spaced">Módulos que componen el escrito</h2>
     <div class="field" style="margin-top:10px;">
       <label>Biblioteca de módulos (nutrida desde biblioteca de párrafos)</label>
+      <select id="moduloSelector"></select>
       <div class="actions-row" style="margin-bottom:8px;">
-        <button type="button" class="btn small" id="btnAddModuloParrafo">+ Agregar módulo desde párrafo seleccionado</button>
+        <button type="button" class="btn small" id="btnAddModuloParrafo">+ Insertar módulo seleccionado en el escrito</button>
       </div>
       <div id="modulosEscritoList"></div>
     </div>
@@ -1037,6 +1038,7 @@ const LS = {
   biblioteca:  "escritos.bibliotecaOtrosies.v1",
   bibliotecaEscritos: "escritos.bibliotecaEscritos.v1",
   bibliotecaParrafos: "escritos.bibliotecaParrafos.v1",
+  bibliotecaModulos: "escritos.bibliotecaModulosTxt.v1",
   syncConfig:  "escritos.sync.config.v1",
   syncPending: "escritos.sync.pending.v1",
   syncState:   "escritos.sync.state.v1"
@@ -1952,6 +1954,8 @@ const state = {
   bibliotecaOtrosies: [],
   bibliotecaEscritos: [],
   bibliotecaParrafos: [],
+  bibliotecaModulos: [],
+  moduloSeleccionadoId: "",
   parrafoSeleccionadoId: "",
   modulosEscritoActual: [],
   moduloSeleccionadoIdx: null,
@@ -1990,11 +1994,49 @@ function loadFromStorage() {
   state.bibliotecaEscritos = [];
   try { state.bibliotecaParrafos = JSON.parse(localStorage.getItem(LS.bibliotecaParrafos) || "[]") || []; }
   catch (e) { state.bibliotecaParrafos = []; }
+  try { state.bibliotecaModulos = JSON.parse(localStorage.getItem(LS.bibliotecaModulos) || "[]") || []; }
+  catch (e) { state.bibliotecaModulos = []; }
 }
 function savePlantillas()  { localStorage.setItem(LS.plantillas, JSON.stringify(state.plantillas)); }
 function saveBiblioteca()  { localStorage.setItem(LS.biblioteca, JSON.stringify(state.bibliotecaOtrosies)); }
 function saveBibliotecaEscritos() { localStorage.setItem(LS.bibliotecaEscritos, JSON.stringify(state.bibliotecaEscritos)); }
 function saveBibliotecaParrafos() { localStorage.setItem(LS.bibliotecaParrafos, JSON.stringify(state.bibliotecaParrafos)); }
+function saveBibliotecaModulos() { localStorage.setItem(LS.bibliotecaModulos, JSON.stringify(state.bibliotecaModulos)); }
+
+function parseModulosTxt(raw) {
+  const lines = String(raw || "").split(/\r?\n/);
+  const mods = [];
+  let actual = null;
+  lines.forEach(line => {
+    const m = line.match(/^\s*===\s*MODULO\s*:\s*(.+?)\s*===\s*$/i);
+    if (m) {
+      if (actual && actual.contenido.trim()) mods.push(actual);
+      actual = { id: "modtxt-" + uuid(), nombre: m[1].trim(), contenido: "" };
+      return;
+    }
+    if (!actual) return;
+    actual.contenido += (actual.contenido ? "\n" : "") + line;
+  });
+  if (actual && actual.contenido.trim()) mods.push(actual);
+  return mods;
+}
+
+async function loadModulosDesdeTxt() {
+  try {
+    const resp = await fetch("modulos_biblioteca.txt", { cache: "no-store" });
+    if (!resp.ok) return;
+    const text = await resp.text();
+    const parsed = parseModulosTxt(text);
+    if (!parsed.length) return;
+    const byName = new Map(state.bibliotecaModulos.map(m => [String(m.nombre || "").trim().toLowerCase(), m]));
+    parsed.forEach(m => {
+      const k = String(m.nombre || "").trim().toLowerCase();
+      if (byName.has(k)) byName.get(k).contenido = m.contenido;
+      else state.bibliotecaModulos.push(m);
+    });
+    saveBibliotecaModulos();
+  } catch (_) {}
+}
 
 function buildTipoDesdeBiblioteca(item) {
   return {
@@ -2105,6 +2147,7 @@ function renderAll() {
   renderDelegantes();
   renderDelegadosIfNeeded();
   renderSumaBody();
+  renderModuloSelector();
   renderModulosEscrito();
   renderCamposVariables();
   renderParrafosBiblioteca();
@@ -2355,9 +2398,9 @@ function detectTokensActuales() {
 function detectTokensModulo(modIndex) {
   const mod = state.modulosEscritoActual[modIndex];
   if (!mod) return [];
-  const p = state.bibliotecaParrafos.find(x => x.id === mod.parrafoId);
-  if (!p) return [];
-  const matches = extractBracketTokens(stripHtml(p.contenido || ""));
+  const contenido = getModuloContenidoByItem(mod);
+  if (!contenido) return [];
+  const matches = extractBracketTokens(stripHtml(contenido));
   const occurrences = [];
   const tokenCounts = {};
   const seenRecurrentIds = new Set();
@@ -2446,12 +2489,43 @@ function renderParrafosBiblioteca() {
     });
 }
 
+function renderModuloSelector() {
+  const sel = document.getElementById("moduloSelector");
+  if (!sel) return;
+  if (!state.moduloSeleccionadoId && state.bibliotecaModulos.length) state.moduloSeleccionadoId = state.bibliotecaModulos[0].id;
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = "";
+  o0.textContent = "— Seleccione un módulo de la biblioteca TXT —";
+  sel.appendChild(o0);
+  state.bibliotecaModulos.forEach(m => {
+    const o = document.createElement("option");
+    o.value = m.id;
+    o.textContent = m.nombre || "Módulo sin nombre";
+    if (m.id === state.moduloSeleccionadoId) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+function getModuloContenidoByItem(m) {
+  if (!m) return "";
+  if (m.tipo === "modulo_txt") {
+    const mod = state.bibliotecaModulos.find(x => x.id === m.moduloId);
+    return mod ? (mod.contenido || "") : "";
+  }
+  // compatibilidad hacia atrás: módulos antiguos por referencia a párrafo
+  if (m.tipo === "parrafo_ref") {
+    const p = state.bibliotecaParrafos.find(x => x.id === m.parrafoId);
+    return p ? (p.contenido || "") : "";
+  }
+  return "";
+}
+
 function recomputeCuerpoFromModulos() {
   const blocks = (state.modulosEscritoActual || []).map(m => {
-    if (m.tipo !== "parrafo_ref") return "";
-    const p = state.bibliotecaParrafos.find(x => x.id === m.parrafoId);
-    if (!p) return `<div><span class="bold">[PÁRRAFO ELIMINADO]</span></div>`;
-    return `<div>${p.contenido || ""}</div>`;
+    const contenido = getModuloContenidoByItem(m);
+    if (!contenido) return `<div><span class="bold">[MÓDULO ELIMINADO]</span></div>`;
+    return `<div>${contenido}</div>`;
   }).filter(Boolean);
   if (!blocks.length) return;
   state.cuerpoPrincipal = blocks.join("<br>");
@@ -2473,8 +2547,9 @@ function renderModulosEscrito() {
     state.moduloSeleccionadoIdx = 0;
   }
   state.modulosEscritoActual.forEach((m, i) => {
-    const p = state.bibliotecaParrafos.find(x => x.id === m.parrafoId);
-    const nombre = p ? p.nombre : "[PÁRRAFO ELIMINADO]";
+    const nombre = m.tipo === "modulo_txt"
+      ? ((state.bibliotecaModulos.find(x => x.id === m.moduloId) || {}).nombre || "[MÓDULO ELIMINADO]")
+      : ((state.bibliotecaParrafos.find(x => x.id === m.parrafoId) || {}).nombre || "[PÁRRAFO ELIMINADO]");
     const row = document.createElement("div");
     row.className = "lib-item";
     if (i === state.moduloSeleccionadoIdx) row.style.borderColor = "var(--primary)";
@@ -2888,8 +2963,9 @@ function bindParrafosEvents() {
   const btnInsertar = document.getElementById("btnInsertarParrafo");
   const btnEliminar = document.getElementById("btnEliminarParrafo");
   const btnAddModulo = document.getElementById("btnAddModuloParrafo");
+  const moduloSel = document.getElementById("moduloSelector");
   const modWrap = document.getElementById("modulosEscritoList");
-  if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar || !btnAddModulo || !modWrap) return;
+  if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar || !btnAddModulo || !modWrap || !moduloSel) return;
 
   bindRichShortcuts(ed, () => {});
   bindRichPaste(ed, () => {});
@@ -2949,15 +3025,20 @@ function bindParrafosEvents() {
   });
 
   btnAddModulo.addEventListener("click", () => {
-    const p = state.bibliotecaParrafos.find(x => x.id === (sel.value || state.parrafoSeleccionadoId));
-    if (!p) { showStatus("Seleccione un párrafo para agregar como módulo.", "err"); return; }
-    state.modulosEscritoActual.push({ tipo: "parrafo_ref", parrafoId: p.id });
+    const mod = state.bibliotecaModulos.find(x => x.id === (moduloSel.value || state.moduloSeleccionadoId));
+    if (!mod) { showStatus("Seleccione un módulo de la biblioteca TXT para insertar.", "err"); return; }
+    state.moduloSeleccionadoId = mod.id;
+    state.modulosEscritoActual.push({ tipo: "modulo_txt", moduloId: mod.id });
     state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
     recomputeCuerpoFromModulos();
     renderModulosEscrito();
     renderCamposVariables();
     updatePreview();
-    showStatus("Módulo agregado a la plantilla modular del escrito.", "ok");
+    showStatus("Módulo insertado en el escrito.", "ok");
+  });
+
+  moduloSel.addEventListener("change", () => {
+    state.moduloSeleccionadoId = moduloSel.value || "";
   });
 
   modWrap.addEventListener("click", e => {
@@ -3633,6 +3714,7 @@ function bindExportEvents() {
     state.otrosies = [];
     state.modulosEscritoActual = [];
     state.moduloSeleccionadoIdx = null;
+    state.moduloSeleccionadoId = state.bibliotecaModulos.length ? state.bibliotecaModulos[0].id : "";
     state.camposVariables = {};
     state.sumaCustom = false; state.cuerpoCustom = false; state.petitorioCustom = false;
     state.plantillaSeleccionadaId = null;
@@ -3797,6 +3879,7 @@ function bindSyncEvents() {
 async function init() {
   await loadPalabrasRecurrentes();
   loadFromStorage();
+  await loadModulosDesdeTxt();
   syncTiposDesdeBiblioteca();
   const t = tipoById(state.tipoEscritoId);
   state.sumaPrincipal = t.sumaPorDefecto || "";
