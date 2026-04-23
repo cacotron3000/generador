@@ -381,6 +381,7 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     </div>
     <div class="actions" id="plantillaCausaActions">
       <label style="margin:0;">Plantilla de causa</label>
+      <input type="text" id="plantillaSelectorSearch" placeholder="Buscar plantilla de causa..." style="min-width:220px; width:auto;">
       <select id="plantillaSelector" style="min-width:260px; width:auto;"></select>
       <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
       <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
@@ -411,6 +412,7 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 
     <h2 class="spaced">Tipo de escrito</h2>
     <div class="field">
+      <input type="text" id="tipoEscritoSearch" placeholder="Buscar tipo de escrito..." style="margin-bottom:6px;">
       <select id="tipoEscrito"></select>
     </div>
 
@@ -2489,13 +2491,16 @@ function renderAll() {
 
 function renderTipoSelector() {
   const sel = document.getElementById("tipoEscrito");
+  const searchInput = document.getElementById("tipoEscritoSearch");
+  const term = ((searchInput && searchInput.value) || "").trim().toLowerCase();
   sel.innerHTML = "";
   const seenIds = new Set();
   const tiposUnicos = TIPOS.filter(t => {
     if (!t || !t.id) return false;
     if (seenIds.has(t.id)) return false;
     seenIds.add(t.id);
-    return true;
+    if (!term) return true;
+    return String(t.nombre || "").toLowerCase().includes(term);
   });
   for (const t of tiposUnicos) {
     const opt = document.createElement("option");
@@ -2513,14 +2518,17 @@ function renderTipoSelector() {
 
 function renderPlantillaSelector() {
   const sel = document.getElementById("plantillaSelector");
+  const searchInput = document.getElementById("plantillaSelectorSearch");
+  const term = ((searchInput && searchInput.value) || "").trim().toLowerCase();
   sel.innerHTML = "";
   const optNew = document.createElement("option");
   optNew.value = ""; optNew.textContent = "— Nueva causa (sin plantilla) —";
-  sel.appendChild(optNew);
+  if (!term || "nueva causa".includes(term)) sel.appendChild(optNew);
   state.plantillas
     .slice()
     .sort((a,b) => (b.actualizadoEn||"").localeCompare(a.actualizadoEn||""))
     .forEach(p => {
+      if (term && !String(p.nombre || "").toLowerCase().includes(term)) return;
       const o = document.createElement("option");
       o.value = p.id;
       o.textContent = p.nombre;
@@ -3246,6 +3254,12 @@ function bindTipoEscritoEvent() {
     const nuevoId = e.target.value;
     cambiarTipoEscrito(nuevoId);
   });
+  const search = document.getElementById("tipoEscritoSearch");
+  if (search) {
+    search.addEventListener("input", () => {
+      renderTipoSelector();
+    });
+  }
 }
 
 function cambiarTipoEscrito(nuevoId) {
@@ -4122,6 +4136,12 @@ function bindOtrosiesEvents() {
 
 // =============== PLANTILLAS (encabezado) ===============
 function bindPlantillaEvents() {
+  const search = document.getElementById("plantillaSelectorSearch");
+  if (search) {
+    search.addEventListener("input", () => {
+      renderPlantillaSelector();
+    });
+  }
   document.getElementById("plantillaSelector").addEventListener("change", e => {
     if ((state.modalidadComparecencia || "mero-tramite") !== "mero-tramite") {
       e.target.value = "";
