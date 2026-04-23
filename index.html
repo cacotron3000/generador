@@ -2852,27 +2852,25 @@ function bindTipoEscritoEvent() {
 }
 
 function cambiarTipoEscrito(nuevoId) {
-  const anterior = tipoById(state.tipoEscritoId);
   const nuevo = tipoById(nuevoId);
+  const nuevaEstructura = Array.isArray(nuevo.estructuraJson)
+    ? JSON.parse(JSON.stringify(nuevo.estructuraJson))
+    : [];
 
-  // Si el cuerpo no fue customizado (o si el nuevo tipo es estructurado), regenerar
-  if (!state.cuerpoCustom || nuevo.estructurado) {
+  let aplicarCuerpo = !state.cuerpoCustom || nuevo.estructurado;
+  if (!aplicarCuerpo) {
+    aplicarCuerpo = window.confirm("El cuerpo actual fue editado manualmente. ¿Desea reemplazarlo con la plantilla del nuevo tipo?");
+  }
+
+  if (aplicarCuerpo) {
     state.cuerpoPrincipal = nuevo.estructurado ? "" : (nuevo.cuerpoPorDefecto ? nuevo.cuerpoPorDefecto(state) : "");
     state.cuerpoCustom = false;
-    state.modulosEscritoActual = Array.isArray(nuevo.estructuraJson) ? JSON.parse(JSON.stringify(nuevo.estructuraJson)) : [];
-    state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? 0 : null;
-    if (state.modulosEscritoActual.length) recomputeCuerpoFromModulos();
-  } else {
-    // Preguntar si quiere descartar
-    const ok = window.confirm("El cuerpo actual fue editado manualmente. ¿Desea reemplazarlo con la plantilla del nuevo tipo?");
-    if (ok) {
-      state.cuerpoPrincipal = nuevo.estructurado ? "" : (nuevo.cuerpoPorDefecto ? nuevo.cuerpoPorDefecto(state) : "");
-      state.cuerpoCustom = false;
-      state.modulosEscritoActual = Array.isArray(nuevo.estructuraJson) ? JSON.parse(JSON.stringify(nuevo.estructuraJson)) : [];
-      state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? 0 : null;
-      if (state.modulosEscritoActual.length) recomputeCuerpoFromModulos();
-    }
   }
+
+  // La estructura modular de la plantilla seleccionada siempre debe cargarse.
+  state.modulosEscritoActual = nuevaEstructura;
+  state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? 0 : null;
+  if (state.modulosEscritoActual.length) recomputeCuerpoFromModulos();
 
   // Suma
   if (!state.sumaCustom) state.sumaPrincipal = nuevo.sumaPorDefecto || "";
