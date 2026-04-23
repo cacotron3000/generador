@@ -1597,7 +1597,7 @@ const Sync = (() => {
       saveBibliotecaModulos();
     }
 
-    const pulledAt = (pl.server_time || ot.server_time || es.server_time || pa.server_time || mo.server_time || new Date().toISOString());
+    const pulledAt = (pl.server_time || moAll.server_time || es.server_time || pa.server_time || mo.server_time || new Date().toISOString());
     setState({ lastPullAt: pulledAt, lastError: null });
     notifyStatus();
     const changed = (plantillasChanged + otrosiesChanged + escritosChanged + parrafosChanged + modulosChanged) > 0;
