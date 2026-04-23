@@ -1,0 +1,9 @@
+=== MODULO: Comparecencia cliente ===
+[CLIENTE], [PROFESIÓN/OFICIO], RUT [NÚMERO DE RUT], domiciliado para estos efectos en [DOMICILIO], a S.S., respetuosamente, digo:
+
+=== MODULO: Mandato judicial ===
+[ABOGADO/A O ABOGADOS/AS], abogado, en representación de [CLIENTE], según se acreditará, todos domiciliados para estos efectos en [DOMICILIO], a S.S., respetuosamente, digo:
+
+=== MODULO: Causa iniciada ===
+[CLIENTE], [PROFESIÓN/OFICIO], RUT [NÚMERO DE RUT], domiciliado para estos efectos en [DOMICILIO], en autos sobre [MATERIA], caratulada “[CARÁTULA]”, Causa [RIT/ROL] [NÚMERO], a S.S., respetuosamente, digo:
+
