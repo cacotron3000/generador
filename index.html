@@ -377,7 +377,7 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 
     <h2 class="spaced">Módulos que componen el escrito</h2>
     <div class="field" style="margin-top:10px;">
-      <label>Estructura modular del escrito (plantilla)</label>
+      <label>Biblioteca de módulos (nutrida desde biblioteca de párrafos)</label>
       <div class="actions-row" style="margin-bottom:8px;">
         <button type="button" class="btn small" id="btnAddModuloParrafo">+ Agregar módulo desde párrafo seleccionado</button>
       </div>
@@ -2321,14 +2321,7 @@ function detectTokensActuales() {
     { id: "comparecencia", text: `${state.materia||""} ${state.caratula||""} ${state.numeroCausa||""}` },
     { id: "petitorio", text: state.petitorio || tipo.petitorioPorDefecto(state) || "" }
   ];
-  if (state.modulosEscritoActual.length) {
-    const i = state.moduloSeleccionadoIdx;
-    if (i != null && i >= 0 && i < state.modulosEscritoActual.length) {
-      const mod = state.modulosEscritoActual[i];
-      const p = state.bibliotecaParrafos.find(x => x.id === mod.parrafoId);
-      sources.push({ id: `modulo:${i}`, text: p ? (p.contenido || "") : "" });
-    }
-  } else {
+  if (!state.modulosEscritoActual.length) {
     sources.push({ id: "cuerpo", text: tipo.estructurado ? String(tipo.generarCuerpoHtml(state) || "") : String(state.cuerpoPrincipal || "") });
   }
   state.otrosies.forEach((o, i) => {
@@ -2359,21 +2352,45 @@ function detectTokensActuales() {
   return occurrences;
 }
 
+function detectTokensModulo(modIndex) {
+  const mod = state.modulosEscritoActual[modIndex];
+  if (!mod) return [];
+  const p = state.bibliotecaParrafos.find(x => x.id === mod.parrafoId);
+  if (!p) return [];
+  const matches = extractBracketTokens(stripHtml(p.contenido || ""));
+  const occurrences = [];
+  const tokenCounts = {};
+  const seenRecurrentIds = new Set();
+  matches.forEach((tok, idx) => {
+    const tokenKey = normalizeRecurrentWord(tokenToLabel(tok));
+    tokenCounts[tokenKey] = (tokenCounts[tokenKey] || 0) + 1;
+    const id = resolveVariableId(`modulo:${modIndex}`, idx + 1, tok);
+    if (id.startsWith("recurrente::") && seenRecurrentIds.has(id)) return;
+    if (id.startsWith("recurrente::")) seenRecurrentIds.add(id);
+    occurrences.push({
+      id,
+      token: tok,
+      serial: tokenCounts[tokenKey],
+      recurrente: id.startsWith("recurrente::")
+    });
+  });
+  return occurrences;
+}
+
 function renderCamposVariables() {
-  const occurrences = detectTokensActuales();
   const title = document.getElementById("camposVarsTitle");
   const wrap = document.getElementById("camposVariablesWrap");
   if (!title || !wrap) return;
 
-  const next = {};
-  occurrences.forEach(o => { next[o.id] = state.camposVariables[o.id] || ""; });
-  state.camposVariables = next;
-
   if (state.modulosEscritoActual.length) {
-    title.textContent = "Campos variables del módulo seleccionado";
-  } else {
-    title.textContent = "Campos variables detectados";
+    title.style.display = "none";
+    wrap.innerHTML = "";
+    return;
   }
+
+  const occurrences = detectTokensActuales();
+  occurrences.forEach(o => { if (state.camposVariables[o.id] == null) state.camposVariables[o.id] = ""; });
+  title.textContent = "Campos variables detectados";
   title.style.display = occurrences.length ? "" : "none";
   wrap.innerHTML = "";
   if (!occurrences.length) return;
@@ -2461,14 +2478,26 @@ function renderModulosEscrito() {
     const row = document.createElement("div");
     row.className = "lib-item";
     if (i === state.moduloSeleccionadoIdx) row.style.borderColor = "var(--primary)";
+    const selected = i === state.moduloSeleccionadoIdx;
+    const tokens = selected ? detectTokensModulo(i) : [];
     row.innerHTML = `
-      <div class="title">Módulo ${i+1}: ${escapeHtml(nombre)}</div>
+      <div class="title" style="cursor:pointer;" data-mod-toggle="${i}">Módulo ${i+1}: ${escapeHtml(nombre)}</div>
       <div class="actions-row">
-        <button type="button" class="btn small" data-mod-select="${i}">Campos [ ]</button>
+        <button type="button" class="btn small" data-mod-toggle="${i}">${selected ? "Contraer" : "Campos [ ]"}</button>
         <button type="button" class="btn small" data-mod-up="${i}" ${i===0?"disabled":""}>▲</button>
         <button type="button" class="btn small" data-mod-down="${i}" ${i===state.modulosEscritoActual.length-1?"disabled":""}>▼</button>
         <button type="button" class="btn small danger" data-mod-del="${i}">Quitar</button>
-      </div>`;
+      </div>
+      ${selected ? `
+      <div style="margin-top:8px;">
+        ${tokens.length ? tokens.map(o => {
+          const label = o.recurrente ? tokenToLabel(o.token) : `${tokenToLabel(o.token)} ${o.serial}`;
+          return `<div class="field" style="margin-bottom:6px;">
+            <label>${escapeHtml(label)}</label>
+            <input type="text" data-mod-var-id="${escapeHtml(o.id)}" value="${escapeHtml(state.camposVariables[o.id] || "")}" placeholder="Valor para ${escapeHtml(o.token)}">
+          </div>`;
+        }).join("") : `<p style="color:var(--muted); font-size:12px; margin:0;">Este módulo no contiene campos [ ]</p>`}
+      </div>` : ""}`;
     wrap.appendChild(row);
   });
 }
@@ -2940,8 +2969,9 @@ function bindParrafosEvents() {
         if (state.moduloSeleccionadoIdx === i) state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? Math.max(0, i-1) : null;
         else if (state.moduloSeleccionadoIdx > i) state.moduloSeleccionadoIdx--;
       }
-    } else if (el.dataset.modSelect != null) {
-      state.moduloSeleccionadoIdx = parseInt(el.dataset.modSelect, 10);
+    } else if (el.dataset.modToggle != null) {
+      const i = parseInt(el.dataset.modToggle, 10);
+      state.moduloSeleccionadoIdx = i;
     } else if (el.dataset.modUp != null) {
       const i = parseInt(el.dataset.modUp, 10);
       if (i > 0) {
@@ -2960,6 +2990,13 @@ function bindParrafosEvents() {
     recomputeCuerpoFromModulos();
     renderModulosEscrito();
     renderCamposVariables();
+    updatePreview();
+  });
+
+  modWrap.addEventListener("input", e => {
+    const el = e.target;
+    if (!el.dataset.modVarId) return;
+    state.camposVariables[el.dataset.modVarId] = el.value;
     updatePreview();
   });
 }
