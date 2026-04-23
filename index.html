@@ -834,7 +834,7 @@ function buildDocxComparecenciaRuns() {
   const d = concordanciaDelegantes(state.delegantes);
   const clientesAct = (state.clientes || []).filter(c => (c.nombre||"").trim());
   const c0 = clientesAct[0] || {};
-  const clienteNombre = applyVariablesToText((c0.nombre || "").trim() || "[CLIENTE]", "comparecencia");
+  const clienteNombre = applyVariablesToText((c0.nombre || "").trim() || "[CLIENTE]", "comparecencia").toUpperCase();
   const clienteNac = applyVariablesToText((c0.nacionalidad || "").trim() || "[NACIONALIDAD]", "comparecencia");
   const clienteEstado = applyVariablesToText((c0.estadoCivil || "").trim() || "[ESTADO CIVIL]", "comparecencia");
   const clienteProf = applyVariablesToText((c0.profesion || "").trim() || "[PROFESIÓN/OFICIO]", "comparecencia");
@@ -2069,6 +2069,9 @@ async function loadModulosDesdeDocx() {
 }
 
 function buildTipoDesdeBiblioteca(item) {
+  const estructuraOrdenada = Array.isArray(item.estructuraJson)
+    ? item.estructuraJson.slice().sort((a,b) => (a.orden || 0) - (b.orden || 0))
+    : [];
   return {
     id: item.id,
     nombre: item.nombre,
@@ -2077,7 +2080,7 @@ function buildTipoDesdeBiblioteca(item) {
     estructurado: false,
     petitorioPorDefecto: () => item.petitorioPorDefecto || "",
     cuerpoPorDefecto: () => item.cuerpoPorDefecto || "",
-    estructuraJson: Array.isArray(item.estructuraJson) ? item.estructuraJson : [],
+    estructuraJson: estructuraOrdenada,
     esPlantillaGuardada: true
   };
 }
@@ -2661,7 +2664,7 @@ function buildComparecenciaHtml() {
   const d = concordanciaDelegantes(state.delegantes);
   const clientesAct = (state.clientes || []).filter(c => (c.nombre||"").trim());
   const c0 = clientesAct[0] || {};
-  const cliente = escapeHtml((c0.nombre || "").trim() || "[CLIENTE]");
+  const cliente = escapeHtml(((c0.nombre || "").trim() || "[CLIENTE]").toUpperCase());
   const nacionalidad = escapeHtml((c0.nacionalidad || "").trim() || "[NACIONALIDAD]");
   const estadoCivil = escapeHtml((c0.estadoCivil || "").trim() || "[ESTADO CIVIL]");
   const profesionCliente = escapeHtml((c0.profesion || "").trim() || "[PROFESIÓN/OFICIO]");
@@ -3737,7 +3740,11 @@ function guardarTipoEscritoActual() {
       ? String(tipoActual.generarCuerpoHtml(state) || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
       : (state.cuerpoPrincipal || "").trim(),
     petitorioPorDefecto: (state.petitorio || "").trim(),
-    estructuraJson: JSON.parse(JSON.stringify(state.modulosEscritoActual || []))
+    estructuraJson: (state.modulosEscritoActual || []).map((mod, idx) => {
+      const clone = JSON.parse(JSON.stringify(mod || {}));
+      clone.orden = idx + 1;
+      return clone;
+    })
   };
   const existente = state.bibliotecaEscritos.find(t =>
     t.nombre.trim().toLowerCase() === payload.nombre.trim().toLowerCase()
