@@ -376,13 +376,12 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 
     <h2 class="spaced">Módulos que componen el escrito</h2>
     <div class="field" style="margin-top:10px;">
-      <label>Biblioteca de módulos (nutrida desde biblioteca de párrafos)</label>
+      <label>Biblioteca de módulos</label>
       <div class="actions-row" style="margin:6px 0 8px;">
-        <button type="button" class="btn small" id="btnAddModuloParrafo">+ Insertar módulo seleccionado en el escrito</button>
+        <button type="button" class="btn small" id="openBibliotecaModulos">Biblioteca de módulos</button>
         <button type="button" class="btn small" id="btnCargarModulosDocx">Cargar/recargar módulos desde DOCX</button>
         <input type="file" id="modulosDocxFile" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none;">
       </div>
-      <div id="modulosCatalogoList"></div>
       <div id="modulosEscritoList"></div>
     </div>
     <h2 class="spaced" id="camposVarsTitle" style="display:none;">Campos variables detectados</h2>
@@ -512,6 +511,18 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       Vista previa de párrafos guardados para reutilizar en el cuerpo del escrito.
     </p>
     <div id="bibliotecaParrafosList"></div>
+  </div>
+</div>
+
+<!-- Modal biblioteca de módulos -->
+<div class="modal-backdrop" id="modalModulosBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalModulosTitle">
+    <button class="close" id="modalModulosClose" title="Cerrar">×</button>
+    <h3 id="modalModulosTitle">Biblioteca de módulos</h3>
+    <p class="muted" style="margin-top:0;">
+      Catálogo de módulos cargados desde DOCX. Inserte desde aquí al escrito actual.
+    </p>
+    <div id="bibliotecaModulosList"></div>
   </div>
 </div>
 
@@ -2176,7 +2187,7 @@ function renderAll() {
   renderDelegantes();
   renderDelegadosIfNeeded();
   renderSumaBody();
-  renderModuloCatalogo();
+  renderBibliotecaModulos();
   renderModulosEscrito();
   renderCamposVariables();
   renderParrafosBiblioteca();
@@ -2547,10 +2558,9 @@ function renderParrafosBiblioteca() {
     });
 }
 
-function renderModuloCatalogo() {
-  const wrap = document.getElementById("modulosCatalogoList");
+function renderBibliotecaModulos() {
+  const wrap = document.getElementById("bibliotecaModulosList");
   if (!wrap) return;
-  if (!state.moduloSeleccionadoId && state.bibliotecaModulos.length) state.moduloSeleccionadoId = state.bibliotecaModulos[0].id;
   wrap.innerHTML = "";
   if (!state.bibliotecaModulos.length) {
     wrap.innerHTML = `<p style="color:var(--muted); font-size:12px;">No hay módulos cargados aún. Use “Cargar/recargar módulos desde DOCX”.</p>`;
@@ -2559,12 +2569,11 @@ function renderModuloCatalogo() {
   state.bibliotecaModulos.forEach((m, i) => {
     const item = document.createElement("div");
     item.className = "lib-item";
-    if (m.id === state.moduloSeleccionadoId) item.style.borderColor = "var(--primary)";
     item.innerHTML = `
       <div class="title">${escapeHtml(m.nombre || `Módulo ${i+1}`)}</div>
       <div class="content">${rich2br(m.contenido || "")}</div>
       <div class="actions-row">
-        <button type="button" class="btn small" data-mod-catalog-select="${escapeHtml(m.id)}">Seleccionar</button>
+        <button type="button" class="btn primary small" data-mod-insert="${escapeHtml(m.id)}">Insertar en el escrito</button>
       </div>`;
     wrap.appendChild(item);
   });
@@ -3054,12 +3063,10 @@ function bindParrafosEvents() {
   const btnGuardar = document.getElementById("btnGuardarParrafo");
   const btnInsertar = document.getElementById("btnInsertarParrafo");
   const btnEliminar = document.getElementById("btnEliminarParrafo");
-  const btnAddModulo = document.getElementById("btnAddModuloParrafo");
   const btnCargarDocx = document.getElementById("btnCargarModulosDocx");
   const docxFile = document.getElementById("modulosDocxFile");
-  const modCatalog = document.getElementById("modulosCatalogoList");
   const modWrap = document.getElementById("modulosEscritoList");
-  if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar || !btnAddModulo || !modWrap || !modCatalog || !btnCargarDocx || !docxFile) return;
+  if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar || !modWrap || !btnCargarDocx || !docxFile) return;
 
   bindRichShortcuts(ed, () => {});
   bindRichPaste(ed, () => {});
@@ -3118,33 +3125,13 @@ function bindParrafosEvents() {
     showStatus("Párrafo eliminado.", "ok");
   });
 
-  btnAddModulo.addEventListener("click", () => {
-    const mod = state.bibliotecaModulos.find(x => x.id === state.moduloSeleccionadoId);
-    if (!mod) { showStatus("Seleccione un módulo de la biblioteca DOCX para insertar.", "err"); return; }
-    state.moduloSeleccionadoId = mod.id;
-    state.modulosEscritoActual.push({ tipo: "modulo_txt", moduloId: mod.id });
-    state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
-    recomputeCuerpoFromModulos();
-    renderModulosEscrito();
-    renderCamposVariables();
-    updatePreview();
-    showStatus("Módulo insertado en el escrito.", "ok");
-  });
-
-  modCatalog.addEventListener("click", e => {
-    const btn = e.target.closest("[data-mod-catalog-select]");
-    if (!btn) return;
-    state.moduloSeleccionadoId = btn.dataset.modCatalogSelect || "";
-    renderModuloCatalogo();
-  });
-
   btnCargarDocx.addEventListener("click", () => docxFile.click());
   docxFile.addEventListener("change", async () => {
     const file = docxFile.files && docxFile.files[0];
     if (!file) return;
     try {
       const changed = await mergeModulosDesdeArrayBuffer(await file.arrayBuffer());
-      renderModuloCatalogo();
+      renderBibliotecaModulos();
       renderModulosEscrito();
       renderCamposVariables();
       updatePreview();
@@ -3282,6 +3269,42 @@ function bindBibliotecaParrafosEvents() {
       renderParrafosBiblioteca();
       showStatus("Párrafo eliminado.", "ok");
     }
+  });
+}
+
+function openBibliotecaModulos() {
+  renderBibliotecaModulos();
+  document.getElementById("modalModulosBackdrop").classList.add("open");
+}
+function closeBibliotecaModulos() {
+  document.getElementById("modalModulosBackdrop").classList.remove("open");
+}
+function bindBibliotecaModulosEvents() {
+  const openBtn = document.getElementById("openBibliotecaModulos");
+  const closeBtn = document.getElementById("modalModulosClose");
+  const backdrop = document.getElementById("modalModulosBackdrop");
+  const list = document.getElementById("bibliotecaModulosList");
+  if (!openBtn || !closeBtn || !backdrop || !list) return;
+  openBtn.addEventListener("click", openBibliotecaModulos);
+  closeBtn.addEventListener("click", closeBibliotecaModulos);
+  backdrop.addEventListener("click", e => {
+    if (e.target.id === "modalModulosBackdrop") closeBibliotecaModulos();
+  });
+  list.addEventListener("click", e => {
+    const btn = e.target.closest("[data-mod-insert]");
+    if (!btn) return;
+    const modId = btn.dataset.modInsert || "";
+    const mod = state.bibliotecaModulos.find(x => x.id === modId);
+    if (!mod) return;
+    state.moduloSeleccionadoId = mod.id;
+    state.modulosEscritoActual.push({ tipo: "modulo_txt", moduloId: mod.id });
+    state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
+    recomputeCuerpoFromModulos();
+    renderModulosEscrito();
+    renderCamposVariables();
+    updatePreview();
+    showStatus("Módulo insertado en el escrito.", "ok");
+    closeBibliotecaModulos();
   });
 }
 
@@ -4041,6 +4064,7 @@ async function init() {
   bindCamposVariablesEvents();
   bindParrafosEvents();
   bindBibliotecaParrafosEvents();
+  bindBibliotecaModulosEvents();
   bindOtrosiesEvents();
   bindBibliotecaEvents();
   bindBibliotecaEscritosEvents();
