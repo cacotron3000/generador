@@ -323,7 +323,7 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
   <div class="actions">
     <button class="btn small" id="btnNuevoEscrito">Nuevo escrito</button>
     <button class="btn small" id="btnCopyTop">Copiar texto</button>
-    <button class="btn small primary" id="btnDocxTop">⬇ Exportar Word (RTF)</button>
+    <button class="btn small primary" id="btnDocxTop">⬇ Exportar Word (.docx)</button>
   </div>
 </div>
 
@@ -345,17 +345,15 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 
   <div class="panel modules-sidebar">
     <h2>Biblioteca de módulos</h2>
-    <div class="inner" style="padding-bottom:0;">
-      <div class="field" style="margin-bottom:8px;">
-        <label style="font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);">Buscar módulo</label>
-        <input type="text" id="sidebarModulosSearch" placeholder="Buscar módulo por nombre o contenido...">
-      </div>
-    </div>
     <div class="sidebar-tabs">
       <button type="button" class="sidebar-tab active" data-sidebar-tab="modulos">Módulos</button>
       <button type="button" class="sidebar-tab" data-sidebar-tab="otrosies">Otrosíes</button>
     </div>
     <div class="inner sidebar-pane active" id="sidebarPaneModulos">
+      <div class="field">
+        <label style="font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);">Buscar módulo</label>
+        <input type="text" id="sidebarModulosSearch" placeholder="Buscar módulo por nombre o contenido...">
+      </div>
       <button type="button" class="btn small" id="btnCargarModulosDocxSidebar">Cargar plantilla (.txt/.docx)</button>
       <div id="sidebarModulosList" style="margin-top:10px;"></div>
     </div>
@@ -1658,13 +1656,17 @@ function rich2br(s) { return String(s||"").replace(/\n/g,"<br/>"); }
 function safeTextarea(s) { return String(s||"").replace(/<\/textarea/gi, "&lt;/textarea"); }
 function extractBracketTokens(s) {
   const out = [];
+  const ignored = new Set([
+    "[PETITORIO]",
+    "[REDACTE EL CUERPO DEL ESCRITO]"
+  ]);
   const re = /\[[^\]\r\n]+\]/g;
   const txt = String(s || "");
   let m;
   while ((m = re.exec(txt)) !== null) {
     const tok = m[0].trim();
     if (!tok) continue;
-    if (tok.toUpperCase() === "[PETITORIO]") continue;
+    if (ignored.has(tok.toUpperCase())) continue;
     out.push(tok);
   }
   return out;
