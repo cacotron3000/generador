@@ -1552,6 +1552,17 @@ function extractBracketTokens(s) {
 function stripHtml(s) {
   return String(s || "").replace(/<[^>]+>/g, " ");
 }
+function stripHtmlWithLineBreaks(s) {
+  return String(s || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\u00a0/g, " ");
+}
+function isRutLikeToken(token) {
+  const t = tokenToLabel(token);
+  return /(RUT|RUN|C[ÉE]DULA|CEDULA|IDENTIDAD)/i.test(t);
+}
 function tokenToLabel(token) {
   return token.replace(/^\[|\]$/g, "").toUpperCase();
 }
@@ -1627,7 +1638,7 @@ function applyVariablesToText(text, sourceId) {
     if (tok.toUpperCase() === "[PETITORIO]") return tok;
     const id = resolveVariableId(sourceId || "global", i, tok);
     const richValue = String((state.camposVariables || {})[id] || "");
-    const replacement = richValue ? stripHtml(richValue).replace(/\s+/g, " ").trim() : tok;
+    const replacement = richValue ? stripHtmlWithLineBreaks(richValue).replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim() : tok;
     return replacement;
   });
   return out;
@@ -2481,10 +2492,16 @@ function renderCamposVariables() {
   occurrences.forEach(o => {
     const value = state.camposVariables[o.id] || "";
     const label = o.recurrente ? tokenToLabel(o.token) : `${tokenToLabel(o.token)} ${o.serial}`;
+    const rutLike = isRutLikeToken(o.token);
     const card = document.createElement("div");
     card.className = "field";
     card.style.marginBottom = "8px";
-    card.innerHTML = `
+    card.innerHTML = rutLike ? `
+      <label>${escapeHtml(label)}</label>
+      <div class="rut-wrap">
+        <input type="text" class="campo-var-input-rut" data-var-id="${escapeHtml(o.id)}" data-var-token="${escapeHtml(o.token)}" value="${escapeHtml(stripHtmlWithLineBreaks(value))}" placeholder="Valor para ${escapeHtml(o.token)}" maxlength="12">
+        <div class="rut-msg"></div>
+      </div>` : `
       <label>${escapeHtml(label)}</label>
       <div class="format-bar">
         <button type="button" class="btn small" data-format-campo="bold" data-var-id="${escapeHtml(o.id)}"><b>N</b></button>
@@ -2607,9 +2624,13 @@ function renderModulosEscrito() {
       <div style="margin-top:8px;">
         ${tokens.length ? tokens.map(o => {
           const label = o.recurrente ? tokenToLabel(o.token) : `${tokenToLabel(o.token)} ${o.serial}`;
+          const rutLike = isRutLikeToken(o.token);
           return `<div class="field" style="margin-bottom:6px;">
             <label>${escapeHtml(label)}</label>
-            <input type="text" data-mod-var-id="${escapeHtml(o.id)}" value="${escapeHtml(state.camposVariables[o.id] || "")}" placeholder="Valor para ${escapeHtml(o.token)}">
+            <div class="${rutLike ? "rut-wrap" : ""}">
+              <input type="text" ${rutLike ? "maxlength='12'" : ""} data-mod-rut="${rutLike ? "1" : "0"}" data-mod-var-id="${escapeHtml(o.id)}" value="${escapeHtml(stripHtmlWithLineBreaks(state.camposVariables[o.id] || ""))}" placeholder="Valor para ${escapeHtml(o.token)}">
+              ${rutLike ? `<div class="rut-msg"></div>` : ""}
+            </div>
           </div>`;
         }).join("") : `<p style="color:var(--muted); font-size:12px; margin:0;">Este módulo no contiene campos [ ]</p>`}
       </div>` : ""}`;
@@ -2938,11 +2959,29 @@ function bindCamposVariablesEvents() {
   if (!wrap) return;
   wrap.addEventListener("input", e => {
     const el = e.target;
-    if (!el.classList.contains("campo-var-editor")) return;
-    const varId = el.dataset.varId;
-    if (!varId) return;
-    state.camposVariables[varId] = el.innerHTML;
-    updatePreview();
+    if (el.classList.contains("campo-var-editor")) {
+      const varId = el.dataset.varId;
+      if (!varId) return;
+      state.camposVariables[varId] = el.innerHTML;
+      updatePreview();
+      return;
+    }
+    if (el.classList.contains("campo-var-input-rut")) {
+      const varId = el.dataset.varId;
+      if (!varId) return;
+      const formatted = formatRut(el.value);
+      el.value = formatted;
+      state.camposVariables[varId] = escapeHtml(formatted);
+      const st = rutStatus(formatted);
+      const msg = el.parentElement.querySelector(".rut-msg");
+      if (msg) {
+        msg.classList.remove("ok","err");
+        msg.textContent = st==="valid" ? "RUT válido." : (st==="invalid" ? "RUT inválido." : "");
+        if (st==="valid") msg.classList.add("ok");
+        if (st==="invalid") msg.classList.add("err");
+      }
+      updatePreview();
+    }
   });
   wrap.addEventListener("focusin", e => {
     const el = e.target;
@@ -3135,7 +3174,21 @@ function bindParrafosEvents() {
   modWrap.addEventListener("input", e => {
     const el = e.target;
     if (!el.dataset.modVarId) return;
-    state.camposVariables[el.dataset.modVarId] = el.value;
+    if (el.dataset.modRut === "1") {
+      const formatted = formatRut(el.value);
+      el.value = formatted;
+      state.camposVariables[el.dataset.modVarId] = escapeHtml(formatted);
+      const st = rutStatus(formatted);
+      const msg = el.parentElement.querySelector(".rut-msg");
+      if (msg) {
+        msg.classList.remove("ok","err");
+        msg.textContent = st==="valid" ? "RUT válido." : (st==="invalid" ? "RUT inválido." : "");
+        if (st==="valid") msg.classList.add("ok");
+        if (st==="invalid") msg.classList.add("err");
+      }
+    } else {
+      state.camposVariables[el.dataset.modVarId] = escapeHtml(el.value);
+    }
     updatePreview();
   });
 }
