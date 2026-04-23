@@ -1340,16 +1340,25 @@ const Sync = (() => {
     let sent = 0;
     for (const op of q) {
       try {
-        const path =
-          op.kind === "plantilla" ? "/plantillas.php" :
-          op.kind === "otrosi" ? "/otrosies.php" :
-          op.kind === "escrito" ? "/escritos.php" :
-          op.kind === "parrafo" ? "/parrafos.php" :
-          "/modulos.php";
+        const pathByKind = {
+          plantilla: "/plantillas.php",
+          otrosi: "/otrosies.php",
+          escrito: "/escritos.php",
+          parrafo: "/parrafos.php",
+          modulo: "/modulos.php"
+        };
+        const path = pathByKind[op.kind];
+        if (!path) {
+          console.warn("Sync: operación descartada por kind desconocido:", op && op.kind, op);
+          continue;
+        }
         if (op.op === "upsert") {
           await apiFetch(path, { method: "POST", body: op.payload });
         } else if (op.op === "delete") {
           await apiFetch(path + "?uuid=" + encodeURIComponent(op.uuid), { method: "DELETE" });
+        } else {
+          console.warn("Sync: operación descartada por op desconocido:", op && op.op, op);
+          continue;
         }
         sent++;
       } catch (e) {
