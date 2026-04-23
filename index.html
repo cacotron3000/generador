@@ -1615,6 +1615,26 @@ const Sync = (() => {
 
   async function syncNow() {
     if (!isConfigured()) throw new Error("Sincronización no configurada.");
+    // Migración one-shot: asegurar que biblioteca local de otrosíes
+    // se publique al backend de módulos aunque no haya sido editada recientemente.
+    const st = getState();
+    if (!st.otrosiesSeededToModulosV1) {
+      (state.bibliotecaOtrosies || []).forEach(o => {
+        if (!o || !o.id) return;
+        enqueue({
+          kind: "otrosi",
+          op: "upsert",
+          uuid: o.id,
+          payload: {
+            uuid: o.id,
+            nombre: toOtrosiModuloNombre(o.titulo),
+            contenido: toOtrosiModuloContenido(o.contenido)
+          },
+          ts: new Date().toISOString()
+        });
+      });
+      setState({ otrosiesSeededToModulosV1: true });
+    }
     const flushed = await flush();
     const pulled  = await pull();
     return { flushed, pulled };
