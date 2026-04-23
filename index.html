@@ -439,6 +439,23 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
         <button type="button" class="add-btn" id="addModuloManual">+ Agregar módulo</button>
         <button type="button" class="btn small" id="openModulosSidebarFromForm">Biblioteca</button>
       </div>
+      <div id="moduloManualComposer" class="otrosi-card" style="display:none; margin-top:8px;">
+        <div class="top">
+          <span class="idx">Nuevo módulo</span>
+        </div>
+        <div class="format-bar" id="moduloManualFormatBar">
+          <button type="button" class="btn small" data-modulo-cmd="bold"><b>N</b></button>
+          <button type="button" class="btn small" data-modulo-cmd="italic"><i>I</i></button>
+          <button type="button" class="btn small" data-modulo-cmd="underline"><u>S</u></button>
+          <button type="button" class="btn small" data-modulo-cmd="indent">Sangría</button>
+          <button type="button" class="btn small" data-modulo-cmd="linebreak">↵</button>
+        </div>
+        <div id="moduloManualEditor" class="rich-editor prose" contenteditable="true" data-placeholder="Escribe aquí el contenido del módulo..."></div>
+        <div class="actions-row" style="margin-top:8px;">
+          <button type="button" class="btn small primary" id="btnGuardarModuloManual">Guardar módulo</button>
+          <button type="button" class="btn small" id="btnCancelarModuloManual">Cancelar</button>
+        </div>
+      </div>
     </div>
     <h2 class="spaced" id="camposVarsTitle" style="display:none;">Campos variables detectados</h2>
     <div id="camposVariablesWrap"></div>
@@ -3267,6 +3284,11 @@ function bindParrafosEvents() {
   const modWrap = document.getElementById("modulosEscritoList");
   const btnAddModuloManual = document.getElementById("addModuloManual");
   const btnOpenModulosSidebar = document.getElementById("openModulosSidebarFromForm");
+  const moduloComposer = document.getElementById("moduloManualComposer");
+  const moduloEditor = document.getElementById("moduloManualEditor");
+  const moduloFormatBar = document.getElementById("moduloManualFormatBar");
+  const btnGuardarModuloManual = document.getElementById("btnGuardarModuloManual");
+  const btnCancelarModuloManual = document.getElementById("btnCancelarModuloManual");
   if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar || !modWrap || !btnCargarDocx || !docxFile) return;
 
   bindRichShortcuts(ed, () => {});
@@ -3336,10 +3358,33 @@ function bindParrafosEvents() {
   }
   if (btnAddModuloManual) {
     btnAddModuloManual.addEventListener("click", () => {
+      if (!moduloComposer || !moduloEditor) return;
+      moduloComposer.style.display = "block";
+      moduloEditor.innerHTML = "";
+      moduloEditor.focus();
+    });
+  }
+  if (moduloFormatBar && moduloEditor) {
+    moduloFormatBar.addEventListener("click", e => {
+      const btn = e.target.closest("[data-modulo-cmd]");
+      if (!btn) return;
+      applyFormatToEditor(moduloEditor, btn.dataset.moduloCmd);
+    });
+    bindRichShortcuts(moduloEditor, () => {});
+    bindRichPaste(moduloEditor, () => {});
+  }
+  if (btnCancelarModuloManual && moduloComposer && moduloEditor) {
+    btnCancelarModuloManual.addEventListener("click", () => {
+      moduloComposer.style.display = "none";
+      moduloEditor.innerHTML = "";
+    });
+  }
+  if (btnGuardarModuloManual && moduloEditor && moduloComposer) {
+    btnGuardarModuloManual.addEventListener("click", () => {
+      const contenidoMod = (moduloEditor.innerHTML || "").trim();
+      if (!contenidoMod) { showStatus("Debe escribir el contenido del módulo.", "err"); return; }
       const nombreMod = (window.prompt("Nombre del módulo:") || "").trim();
       if (!nombreMod) { showStatus("Debe indicar un nombre para el módulo.", "err"); return; }
-      const contenidoMod = (window.prompt("Contenido del módulo (texto o HTML simple):") || "").trim();
-      if (!contenidoMod) { showStatus("Debe indicar contenido para el módulo.", "err"); return; }
       const now = new Date().toISOString();
       const item = { id: "mod-" + uuid(), nombre: nombreMod, contenido: contenidoMod, creadoEn: now, actualizadoEn: now };
       state.bibliotecaModulos.push(item);
@@ -3359,7 +3404,9 @@ function bindParrafosEvents() {
       renderModulosEscrito();
       renderCamposVariables();
       updatePreview();
-      showStatus("Módulo agregado al escrito y guardado en biblioteca.", "ok");
+      moduloComposer.style.display = "none";
+      moduloEditor.innerHTML = "";
+      showStatus("Módulo agregado al escrito, guardado y sincronizado.", "ok");
     });
   }
   docxFile.addEventListener("change", async () => {
