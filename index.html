@@ -1162,6 +1162,7 @@ const LS = {
 // =============================================================================
 const Sync = (() => {
   const OTROSI_MOD_PREFIX = "__OTROSI__::";
+  const OTROSI_EMPTY_SENTINEL = "<!--OTROSI_EMPTY-->";
   function toOtrosiModuloNombre(titulo) {
     return OTROSI_MOD_PREFIX + String(titulo || "").trim();
   }
@@ -1170,6 +1171,14 @@ const Sync = (() => {
   }
   function isOtrosiModuloNombre(nombre) {
     return String(nombre || "").startsWith(OTROSI_MOD_PREFIX);
+  }
+  function toOtrosiModuloContenido(contenido) {
+    const c = String(contenido || "");
+    return c.trim() ? c : OTROSI_EMPTY_SENTINEL;
+  }
+  function fromOtrosiModuloContenido(contenido) {
+    const c = String(contenido || "");
+    return c === OTROSI_EMPTY_SENTINEL ? "" : c;
   }
   const EMPTY_CFG = { apiBaseUrl: "", apiToken: "", autoIntervalMin: 2 };
 
@@ -1271,7 +1280,7 @@ const Sync = (() => {
     enqueue({
       kind: "otrosi", op: "upsert",
       uuid: o.id,
-      payload: { uuid: o.id, nombre: toOtrosiModuloNombre(o.titulo), contenido: o.contenido },
+      payload: { uuid: o.id, nombre: toOtrosiModuloNombre(o.titulo), contenido: toOtrosiModuloContenido(o.contenido) },
       ts: new Date().toISOString()
     });
     scheduleFlush();
@@ -1461,7 +1470,7 @@ const Sync = (() => {
           const merged = {
             id: srv.uuid,
             titulo: fromOtrosiModuloNombre(srv.nombre),
-            contenido: srv.contenido,
+            contenido: fromOtrosiModuloContenido(srv.contenido),
             creadoEn: srv.creadoEn,
             actualizadoEn: srv.actualizadoEn
           };
