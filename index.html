@@ -435,6 +435,10 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
         <input type="file" id="modulosDocxFile" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none;">
       </div>
       <div id="modulosEscritoList"></div>
+      <div class="actions-row" style="margin-top:8px;">
+        <button type="button" class="add-btn" id="addModuloManual">+ Agregar módulo</button>
+        <button type="button" class="btn small" id="openModulosSidebarFromForm">Biblioteca</button>
+      </div>
     </div>
     <h2 class="spaced" id="camposVarsTitle" style="display:none;">Campos variables detectados</h2>
     <div id="camposVariablesWrap"></div>
@@ -3261,6 +3265,8 @@ function bindParrafosEvents() {
   const btnCargarDocx = document.getElementById("btnCargarModulosDocx");
   const docxFile = document.getElementById("modulosDocxFile");
   const modWrap = document.getElementById("modulosEscritoList");
+  const btnAddModuloManual = document.getElementById("addModuloManual");
+  const btnOpenModulosSidebar = document.getElementById("openModulosSidebarFromForm");
   if (!sel || !nombre || !ed || !btnGuardar || !btnInsertar || !btnEliminar || !modWrap || !btnCargarDocx || !docxFile) return;
 
   bindRichShortcuts(ed, () => {});
@@ -3321,6 +3327,41 @@ function bindParrafosEvents() {
   });
 
   btnCargarDocx.addEventListener("click", () => docxFile.click());
+  if (btnOpenModulosSidebar) {
+    btnOpenModulosSidebar.addEventListener("click", () => {
+      setSidebarTab("modulos");
+      const search = document.getElementById("sidebarModulosSearch");
+      if (search) search.focus();
+    });
+  }
+  if (btnAddModuloManual) {
+    btnAddModuloManual.addEventListener("click", () => {
+      const nombreMod = (window.prompt("Nombre del módulo:") || "").trim();
+      if (!nombreMod) { showStatus("Debe indicar un nombre para el módulo.", "err"); return; }
+      const contenidoMod = (window.prompt("Contenido del módulo (texto o HTML simple):") || "").trim();
+      if (!contenidoMod) { showStatus("Debe indicar contenido para el módulo.", "err"); return; }
+      const now = new Date().toISOString();
+      const item = { id: "mod-" + uuid(), nombre: nombreMod, contenido: contenidoMod, creadoEn: now, actualizadoEn: now };
+      state.bibliotecaModulos.push(item);
+      saveBibliotecaModulos();
+      Sync.onModuloUpsert(item);
+      syncInstant();
+      state.modulosEscritoActual.push({
+        tipo: "modulo_txt",
+        moduloId: item.id,
+        nombreSnapshot: item.nombre,
+        contenidoSnapshot: item.contenido
+      });
+      state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
+      recomputeCuerpoFromModulos();
+      renderBibliotecaModulos();
+      renderSidebarModulos();
+      renderModulosEscrito();
+      renderCamposVariables();
+      updatePreview();
+      showStatus("Módulo agregado al escrito y guardado en biblioteca.", "ok");
+    });
+  }
   docxFile.addEventListener("change", async () => {
     const file = docxFile.files && docxFile.files[0];
     if (!file) return;
