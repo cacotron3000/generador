@@ -1544,7 +1544,10 @@ const Sync = (() => {
         }
       }
     });
-    if (modulosChanged) saveBibliotecaModulos();
+    if (modulosChanged) {
+      dedupeModulos();
+      saveBibliotecaModulos();
+    }
 
     const pulledAt = (pl.server_time || ot.server_time || es.server_time || pa.server_time || mo.server_time || new Date().toISOString());
     setState({ lastPullAt: pulledAt, lastError: null });
@@ -1826,6 +1829,39 @@ function dedupeParrafos() {
     seenContent.add(key);
     return true;
   });
+}
+function dedupeModulos() {
+  const seenIds = new Set();
+  const seenContent = new Set();
+  state.bibliotecaModulos = (state.bibliotecaModulos || []).filter(m => {
+    if (!m || !m.id) return false;
+    if (seenIds.has(m.id)) return false;
+    const key = normalizeLibText(m.nombre) + "||" + normalizeLibText(m.contenido);
+    if (seenContent.has(key)) return false;
+    seenIds.add(m.id);
+    seenContent.add(key);
+    return true;
+  });
+}
+
+function splitEstructuraYOtrosies(rawEstructura) {
+  const entrada = Array.isArray(rawEstructura) ? rawEstructura : [];
+  const estructura = [];
+  let otrosies = [];
+  entrada.forEach(item => {
+    if (item && item.tipo === "__meta_otrosies") {
+      if (Array.isArray(item.otrosies)) {
+        otrosies = item.otrosies.map(o => ({
+          id: o && o.id ? String(o.id) : uuid(),
+          titulo: String((o && o.titulo) || ""),
+          contenido: String((o && o.contenido) || "")
+        }));
+      }
+      return;
+    }
+    estructura.push(item);
+  });
+  return { estructura, otrosies };
 }
 function applyFormatToEditor(editor, cmd) {
   if (!editor) return;
@@ -2203,11 +2239,15 @@ async function mergeModulosDesdeArrayBuffer(arrayBuffer) {
       m.creadoEn = new Date().toISOString();
       m.actualizadoEn = m.creadoEn;
       state.bibliotecaModulos.push(m);
+      byName.set(k, m);
       Sync.onModuloUpsert(m);
       changed++;
     }
   });
-  if (changed) saveBibliotecaModulos();
+  if (changed) {
+    dedupeModulos();
+    saveBibliotecaModulos();
+  }
   return changed;
 }
 
@@ -2218,9 +2258,10 @@ async function loadModulosDesdeDocx() {
 }
 
 function buildTipoDesdeBiblioteca(item) {
-  const estructuraOrdenada = Array.isArray(item.estructuraJson)
-    ? item.estructuraJson.slice().sort((a,b) => (a.orden || 0) - (b.orden || 0))
-    : [];
+  const split = splitEstructuraYOtrosies(item.estructuraJson);
+  const estructuraOrdenada = split.estructura
+    .slice()
+    .sort((a,b) => (a.orden || 0) - (b.orden || 0));
   return {
     id: item.id,
     nombre: item.nombre,
@@ -2230,6 +2271,7 @@ function buildTipoDesdeBiblioteca(item) {
     petitorioPorDefecto: () => item.petitorioPorDefecto || "",
     cuerpoPorDefecto: () => item.cuerpoPorDefecto || "",
     estructuraJson: estructuraOrdenada,
+    otrosiesJson: split.otrosies,
     esPlantillaGuardada: true
   };
 }
@@ -2700,6 +2742,8 @@ function renderParrafosBiblioteca() {
 }
 
 function renderBibliotecaModulos() {
+  dedupeModulos();
+  saveBibliotecaModulos();
   const wrap = document.getElementById("bibliotecaModulosList");
   const search = document.getElementById("modulosSearchInput");
   if (!wrap) return;
@@ -2733,6 +2777,7 @@ function renderBibliotecaModulos() {
 }
 
 function renderSidebarModulos() {
+  dedupeModulos();
   const wrap = document.getElementById("sidebarModulosList");
   const search = document.getElementById("sidebarModulosSearch");
   if (!wrap) return;
@@ -3074,6 +3119,9 @@ function cambiarTipoEscrito(nuevoId) {
   const nuevaEstructura = Array.isArray(nuevo.estructuraJson)
     ? JSON.parse(JSON.stringify(nuevo.estructuraJson))
     : [];
+  const nuevosOtrosies = Array.isArray(nuevo.otrosiesJson)
+    ? JSON.parse(JSON.stringify(nuevo.otrosiesJson))
+    : [];
 
   let aplicarCuerpo = !state.cuerpoCustom || nuevo.estructurado;
   if (!aplicarCuerpo) {
@@ -3089,6 +3137,11 @@ function cambiarTipoEscrito(nuevoId) {
   state.modulosEscritoActual = nuevaEstructura;
   state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? 0 : null;
   if (state.modulosEscritoActual.length) recomputeCuerpoFromModulos();
+  state.otrosies = nuevosOtrosies.map(o => ({
+    id: o && o.id ? String(o.id) : uuid(),
+    titulo: String((o && o.titulo) || ""),
+    contenido: String((o && o.contenido) || "")
+  }));
 
   // Suma
   if (!state.sumaCustom) state.sumaPrincipal = nuevo.sumaPorDefecto || "";
@@ -3098,6 +3151,7 @@ function cambiarTipoEscrito(nuevoId) {
   state.tipoEscritoId = nuevoId;
   renderTipoSelector();
   renderSumaBody();
+  renderOtrosies();
   renderDelegadosIfNeeded();
   updatePreview();
 }
@@ -3386,8 +3440,19 @@ function bindParrafosEvents() {
       const nombreMod = (window.prompt("Nombre del módulo:") || "").trim();
       if (!nombreMod) { showStatus("Debe indicar un nombre para el módulo.", "err"); return; }
       const now = new Date().toISOString();
-      const item = { id: "mod-" + uuid(), nombre: nombreMod, contenido: contenidoMod, creadoEn: now, actualizadoEn: now };
-      state.bibliotecaModulos.push(item);
+      let item = state.bibliotecaModulos.find(x =>
+        normalizeLibText(x.nombre) === normalizeLibText(nombreMod) &&
+        normalizeLibText(x.contenido) === normalizeLibText(contenidoMod)
+      );
+      if (item) {
+        item.nombre = nombreMod;
+        item.contenido = contenidoMod;
+        item.actualizadoEn = now;
+      } else {
+        item = { id: "mod-" + uuid(), nombre: nombreMod, contenido: contenidoMod, creadoEn: now, actualizadoEn: now };
+        state.bibliotecaModulos.push(item);
+      }
+      dedupeModulos();
       saveBibliotecaModulos();
       Sync.onModuloUpsert(item);
       syncInstant();
@@ -4136,6 +4201,26 @@ function guardarTipoEscritoActual() {
   const nombre = (window.prompt("Nombre de la plantilla de escrito:") || "").trim();
   if (!nombre) { showStatus("Nombre obligatorio para guardar la plantilla de escrito.", "err"); return; }
   const tipoActual = tipoById(state.tipoEscritoId);
+  const estructuraConSnapshots = (state.modulosEscritoActual || []).map((mod, idx) => {
+    const clone = JSON.parse(JSON.stringify(mod || {}));
+    if (clone.tipo === "modulo_txt") {
+      const src = state.bibliotecaModulos.find(x => x.id === clone.moduloId);
+      clone.nombreSnapshot = (src && src.nombre) || clone.nombreSnapshot || "";
+      clone.contenidoSnapshot = (src && src.contenido) || clone.contenidoSnapshot || "";
+    } else if (clone.tipo === "parrafo_ref") {
+      const src = state.bibliotecaParrafos.find(x => x.id === clone.parrafoId);
+      clone.nombreSnapshot = (src && src.nombre) || clone.nombreSnapshot || "";
+      clone.contenidoSnapshot = (src && src.contenido) || clone.contenidoSnapshot || "";
+    }
+    clone.orden = idx + 1;
+    return clone;
+  });
+  const otrosiesSnapshot = (state.otrosies || []).map(o => ({
+    id: o && o.id ? String(o.id) : uuid(),
+    titulo: String((o && o.titulo) || "").trim(),
+    contenido: String((o && o.contenido) || "").trim()
+  })).filter(o => o.titulo || stripHtmlWithLineBreaks(o.contenido));
+
   const payload = {
     nombre,
     usaDelegados: !!tipoActual.usaDelegados,
@@ -4144,20 +4229,9 @@ function guardarTipoEscritoActual() {
       ? String(tipoActual.generarCuerpoHtml(state) || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
       : (state.cuerpoPrincipal || "").trim(),
     petitorioPorDefecto: (state.petitorio || "").trim(),
-    estructuraJson: (state.modulosEscritoActual || []).map((mod, idx) => {
-      const clone = JSON.parse(JSON.stringify(mod || {}));
-      if (clone.tipo === "modulo_txt") {
-        const src = state.bibliotecaModulos.find(x => x.id === clone.moduloId);
-        clone.nombreSnapshot = (src && src.nombre) || clone.nombreSnapshot || "";
-        clone.contenidoSnapshot = (src && src.contenido) || clone.contenidoSnapshot || "";
-      } else if (clone.tipo === "parrafo_ref") {
-        const src = state.bibliotecaParrafos.find(x => x.id === clone.parrafoId);
-        clone.nombreSnapshot = (src && src.nombre) || clone.nombreSnapshot || "";
-        clone.contenidoSnapshot = (src && src.contenido) || clone.contenidoSnapshot || "";
-      }
-      clone.orden = idx + 1;
-      return clone;
-    })
+    estructuraJson: otrosiesSnapshot.length
+      ? estructuraConSnapshots.concat([{ tipo: "__meta_otrosies", otrosies: otrosiesSnapshot }])
+      : estructuraConSnapshots
   };
   const existente = state.bibliotecaEscritos.find(t =>
     t.nombre.trim().toLowerCase() === payload.nombre.trim().toLowerCase()
