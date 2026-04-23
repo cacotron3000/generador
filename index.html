@@ -982,13 +982,22 @@ function buildDocxComparecenciaRuns() {
 
 function buildDocxCuerpoParas() {
   const tipo = tipoById(state.tipoEscritoId);
+  if (state.modulosEscritoActual && state.modulosEscritoActual.length) {
+    const blocks = state.modulosEscritoActual.map((m, i) => {
+      const contenido = getModuloContenidoByItem(m);
+      if (!contenido) return `<div><span class="bold">[MÓDULO ELIMINADO]</span></div>`;
+      return `<div style="font-family:Tahoma; font-size:11pt; line-height:1.5;">${applyVariablesToHtml(contenido, `modulo:${i}`)}</div>`;
+    }).filter(Boolean);
+    const paragraphs = htmlToDocxParagraphs(blocks.join("<br>"));
+    return paragraphs.map(runs => dxP(dxRuns(runs), { align: "both", indent: 720 }));
+  }
   if (tipo.estructurado) {
     // Para tipos estructurados: preservar negrita/cursiva/subrayado del HTML original.
     const html = applyVariablesToHtml(tipo.generarCuerpoHtml(state), "cuerpo");
     const paragraphs = htmlToDocxParagraphs(html);
     return paragraphs.map(runs => dxP(dxRuns(runs), { align: "both", indent: 720 }));
   }
-  // Tipos libres: el textarea contiene solo texto plano; separamos por líneas en blanco.
+  // Tipos libres: usar cuerpo editable con reemplazo de variables globales.
   const html = applyVariablesToHtml(state.cuerpoPrincipal || "", "cuerpo");
   const paragraphs = htmlToDocxParagraphs(html);
   return paragraphs.map(runs => dxP(dxRuns(runs), { align: "both", indent: 720 }));
