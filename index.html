@@ -1161,6 +1161,16 @@ const LS = {
 //  • Si no hay API configurada, el módulo no hace nada (modo 100% localStorage).
 // =============================================================================
 const Sync = (() => {
+  const OTROSI_MOD_PREFIX = "__OTROSI__::";
+  function toOtrosiModuloNombre(titulo) {
+    return OTROSI_MOD_PREFIX + String(titulo || "").trim();
+  }
+  function fromOtrosiModuloNombre(nombre) {
+    return String(nombre || "").replace(new RegExp("^" + OTROSI_MOD_PREFIX), "").trim();
+  }
+  function isOtrosiModuloNombre(nombre) {
+    return String(nombre || "").startsWith(OTROSI_MOD_PREFIX);
+  }
   const EMPTY_CFG = { apiBaseUrl: "", apiToken: "", autoIntervalMin: 2 };
 
   function getConfig() {
@@ -1261,7 +1271,7 @@ const Sync = (() => {
     enqueue({
       kind: "otrosi", op: "upsert",
       uuid: o.id,
-      payload: { uuid: o.id, titulo: o.titulo, contenido: o.contenido },
+      payload: { uuid: o.id, nombre: toOtrosiModuloNombre(o.titulo), contenido: o.contenido },
       ts: new Date().toISOString()
     });
     scheduleFlush();
@@ -1342,7 +1352,7 @@ const Sync = (() => {
       try {
         const pathByKind = {
           plantilla: "/plantillas.php",
-          otrosi: "/otrosies.php",
+          otrosi: "/modulos.php",
           escrito: "/escritos.php",
           parrafo: "/parrafos.php",
           modulo: "/modulos.php"
@@ -1431,10 +1441,14 @@ const Sync = (() => {
     });
     if (plantillasChanged) savePlantillas();
 
-    // Otrosíes
-    const ot = await apiFetch("/otrosies.php?since=" + encodeURIComponent(since));
+    // Módulos + Otrosíes (comparten tabla modulos en cPanel)
+    const moAll = await apiFetch("/modulos.php?since=" + encodeURIComponent(since));
+    const ot = {
+      modulos: (moAll.modulos || []).filter(x => isOtrosiModuloNombre(x && x.nombre)),
+      server_time: moAll.server_time
+    };
     const bByIdLocal = new Map(state.bibliotecaOtrosies.map(o => [o.id, o]));
-    (ot.otrosies || []).forEach(srv => {
+    (ot.modulos || []).forEach(srv => {
       if (srv.eliminadoEn) {
         const before = state.bibliotecaOtrosies.length;
         state.bibliotecaOtrosies = state.bibliotecaOtrosies.filter(o => o.id !== srv.uuid);
@@ -1446,7 +1460,7 @@ const Sync = (() => {
         if (!local || srvTs > locTs) {
           const merged = {
             id: srv.uuid,
-            titulo: srv.titulo,
+            titulo: fromOtrosiModuloNombre(srv.nombre),
             contenido: srv.contenido,
             creadoEn: srv.creadoEn,
             actualizadoEn: srv.actualizadoEn
@@ -1535,8 +1549,11 @@ const Sync = (() => {
       console.warn("Sync: endpoint /parrafos.php no disponible o con error; se omite su pull.", e);
     }
 
-    // Módulos
-    const mo = await apiFetch("/modulos.php?since=" + encodeURIComponent(since));
+    // Módulos (excluyendo los usados para biblioteca de otrosíes)
+    const mo = {
+      modulos: (moAll.modulos || []).filter(x => !isOtrosiModuloNombre(x && x.nombre)),
+      server_time: moAll.server_time
+    };
     const mByIdLocal = new Map(state.bibliotecaModulos.map(m => [m.id, m]));
     (mo.modulos || []).forEach(srv => {
       if (srv.eliminadoEn) {
@@ -1577,7 +1594,7 @@ const Sync = (() => {
       } catch (e) { /* noop */ }
     }
     return {
-      pulled: (pl.plantillas || []).length + (ot.otrosies || []).length + (es.escritos || []).length + (pa.parrafos || []).length + (mo.modulos || []).length,
+      pulled: (pl.plantillas || []).length + (ot.modulos || []).length + (es.escritos || []).length + (pa.parrafos || []).length + (mo.modulos || []).length,
       changed,
       plantillasChanged,
       otrosiesChanged,
