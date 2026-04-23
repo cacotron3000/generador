@@ -1453,15 +1453,25 @@ const Sync = (() => {
     // Módulos + Otrosíes desde tabla modulos
     const moAll = await apiFetch("/modulos.php?since=" + encodeURIComponent(since));
     const otLegacy = (moAll.modulos || []).filter(x => isOtrosiModuloNombre(x && x.nombre));
+    const otFallback = otLegacy.length ? [] : (moAll.modulos || []);
     const bByIdLocal = new Map(state.bibliotecaOtrosies.map(o => [o.id, o]));
-    const otrosiesRemotos = otLegacy.map(x => ({
-      uuid: x.uuid,
-      titulo: fromOtrosiModuloNombre(x.nombre),
-      contenido: fromOtrosiModuloContenido(x.contenido),
-      creadoEn: x.creadoEn,
-      actualizadoEn: x.actualizadoEn,
-      eliminadoEn: x.eliminadoEn
-    }));
+    const otrosiesRemotos = []
+      .concat(otLegacy.map(x => ({
+        uuid: x.uuid,
+        titulo: fromOtrosiModuloNombre(x.nombre),
+        contenido: fromOtrosiModuloContenido(x.contenido),
+        creadoEn: x.creadoEn,
+        actualizadoEn: x.actualizadoEn,
+        eliminadoEn: x.eliminadoEn
+      })))
+      .concat(otFallback.map(x => ({
+        uuid: x.uuid,
+        titulo: x.nombre || "",
+        contenido: x.contenido || "",
+        creadoEn: x.creadoEn,
+        actualizadoEn: x.actualizadoEn,
+        eliminadoEn: x.eliminadoEn
+      })));
     otrosiesRemotos.forEach(srv => {
       if (srv.eliminadoEn) {
         const before = state.bibliotecaOtrosies.length;
