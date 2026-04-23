@@ -379,6 +379,13 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
         <option value="con-patrocinio-poder-causa-iniciada">4. Con patrocinio y poder (causa ya iniciada)</option>
       </select>
     </div>
+    <div class="actions" id="plantillaCausaActions">
+      <label style="margin:0;">Plantilla de causa</label>
+      <select id="plantillaSelector" style="min-width:260px; width:auto;"></select>
+      <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
+      <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
+      <button class="btn small danger" id="btnEliminarPlantilla">Eliminar</button>
+    </div>
     <div class="field"><label>Tribunal</label><input type="text" id="tribunal" placeholder="Ej.: PRIMER JUZGADO DE LETRAS DEL TRABAJO DE SANTIAGO"></div>
     <div class="field" id="fieldMateria"><label>Materia</label><input type="text" id="materia" placeholder="Ej.: despido injustificado"></div>
     <div class="field" id="fieldCaratula"><label>Carátula <span class="hint">(se mostrará siempre en mayúsculas)</span></label><input type="text" id="caratula" placeholder="Ej.: Pérez con Empresa X S.A."></div>
@@ -400,14 +407,6 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       <h2 class="spaced">Abogado/a que comparece</h2>
       <div id="delegantesList"></div>
       <button type="button" class="add-btn" id="addDelegante">+ Agregar firmante</button>
-    </div>
-
-    <div class="actions" id="plantillaCausaActions">
-      <label style="margin:0;">Plantilla de causa</label>
-      <select id="plantillaSelector" style="min-width:260px; width:auto;"></select>
-      <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
-      <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
-      <button class="btn small danger" id="btnEliminarPlantilla">Eliminar</button>
     </div>
 
     <h2 class="spaced">Tipo de escrito</h2>
