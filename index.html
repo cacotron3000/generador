@@ -2598,12 +2598,14 @@ function getModuloContenidoByItem(m) {
   if (!m) return "";
   if (m.tipo === "modulo_txt") {
     const mod = state.bibliotecaModulos.find(x => x.id === m.moduloId);
-    return mod ? (mod.contenido || "") : "";
+    if (mod) return mod.contenido || "";
+    return m.contenidoSnapshot || "";
   }
   // compatibilidad hacia atrás: módulos antiguos por referencia a párrafo
   if (m.tipo === "parrafo_ref") {
     const p = state.bibliotecaParrafos.find(x => x.id === m.parrafoId);
-    return p ? (p.contenido || "") : "";
+    if (p) return p.contenido || "";
+    return m.contenidoSnapshot || "";
   }
   return "";
 }
@@ -2634,8 +2636,8 @@ function renderModulosEscrito() {
   }
   state.modulosEscritoActual.forEach((m, i) => {
     const nombre = m.tipo === "modulo_txt"
-      ? ((state.bibliotecaModulos.find(x => x.id === m.moduloId) || {}).nombre || "[MÓDULO ELIMINADO]")
-      : ((state.bibliotecaParrafos.find(x => x.id === m.parrafoId) || {}).nombre || "[PÁRRAFO ELIMINADO]");
+      ? ((state.bibliotecaModulos.find(x => x.id === m.moduloId) || {}).nombre || m.nombreSnapshot || "[MÓDULO ELIMINADO]")
+      : ((state.bibliotecaParrafos.find(x => x.id === m.parrafoId) || {}).nombre || m.nombreSnapshot || "[PÁRRAFO ELIMINADO]");
     const row = document.createElement("div");
     row.className = "lib-item";
     if (i === state.moduloSeleccionadoIdx) row.style.borderColor = "var(--primary)";
@@ -3314,7 +3316,12 @@ function bindBibliotecaModulosEvents() {
       const mod = state.bibliotecaModulos.find(x => x.id === modId);
       if (!mod) return;
       state.moduloSeleccionadoId = mod.id;
-      state.modulosEscritoActual.push({ tipo: "modulo_txt", moduloId: mod.id });
+      state.modulosEscritoActual.push({
+        tipo: "modulo_txt",
+        moduloId: mod.id,
+        nombreSnapshot: mod.nombre || "",
+        contenidoSnapshot: mod.contenido || ""
+      });
       state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
       recomputeCuerpoFromModulos();
       renderModulosEscrito();
@@ -3802,6 +3809,15 @@ function guardarTipoEscritoActual() {
     petitorioPorDefecto: (state.petitorio || "").trim(),
     estructuraJson: (state.modulosEscritoActual || []).map((mod, idx) => {
       const clone = JSON.parse(JSON.stringify(mod || {}));
+      if (clone.tipo === "modulo_txt") {
+        const src = state.bibliotecaModulos.find(x => x.id === clone.moduloId);
+        clone.nombreSnapshot = (src && src.nombre) || clone.nombreSnapshot || "";
+        clone.contenidoSnapshot = (src && src.contenido) || clone.contenidoSnapshot || "";
+      } else if (clone.tipo === "parrafo_ref") {
+        const src = state.bibliotecaParrafos.find(x => x.id === clone.parrafoId);
+        clone.nombreSnapshot = (src && src.nombre) || clone.nombreSnapshot || "";
+        clone.contenidoSnapshot = (src && src.contenido) || clone.contenidoSnapshot || "";
+      }
       clone.orden = idx + 1;
       return clone;
     })
