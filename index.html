@@ -1172,6 +1172,23 @@ const Sync = (() => {
   function isOtrosiModuloNombre(nombre) {
     return String(nombre || "").startsWith(OTROSI_MOD_PREFIX);
   }
+  function normalizeSyncUuid(raw) {
+    const s = String(raw || "").trim();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)) return s;
+    const m = s.match(/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
+    return m ? m[1] : "";
+  }
+  function ensureSyncUuid(entity) {
+    if (!entity) return "";
+    const current = normalizeSyncUuid(entity.syncUuid || entity.id);
+    if (current) {
+      entity.syncUuid = current;
+      return current;
+    }
+    const generated = uuid();
+    entity.syncUuid = generated;
+    return generated;
+  }
   function toOtrosiModuloContenido(contenido) {
     const c = String(contenido || "");
     return c.trim() ? c : OTROSI_EMPTY_SENTINEL;
@@ -1277,26 +1294,30 @@ const Sync = (() => {
   }
   function onOtrosiUpsert(o) {
     if (!isConfigured()) return;
+    const syncUuid = ensureSyncUuid(o);
     enqueue({
       kind: "otrosi", op: "upsert",
-      uuid: o.id,
-      payload: { uuid: o.id, nombre: toOtrosiModuloNombre(o.titulo), contenido: toOtrosiModuloContenido(o.contenido) },
+      uuid: syncUuid,
+      payload: { uuid: syncUuid, nombre: toOtrosiModuloNombre(o.titulo), contenido: toOtrosiModuloContenido(o.contenido) },
       ts: new Date().toISOString()
     });
     scheduleFlush();
   }
   function onOtrosiDelete(uuid) {
     if (!isConfigured()) return;
-    enqueue({ kind: "otrosi", op: "delete", uuid, ts: new Date().toISOString() });
+    const syncUuid = normalizeSyncUuid(uuid);
+    if (!syncUuid) return;
+    enqueue({ kind: "otrosi", op: "delete", uuid: syncUuid, ts: new Date().toISOString() });
     scheduleFlush();
   }
   function onEscritoUpsert(t) {
     if (!isConfigured()) return;
+    const syncUuid = ensureSyncUuid(t);
     enqueue({
       kind: "escrito", op: "upsert",
-      uuid: t.id,
+      uuid: syncUuid,
       payload: {
-        uuid: t.id,
+        uuid: syncUuid,
         nombre: t.nombre,
         sumaPorDefecto: t.sumaPorDefecto || "",
         cuerpoPorDefecto: t.cuerpoPorDefecto || "",
@@ -1310,37 +1331,45 @@ const Sync = (() => {
   }
   function onEscritoDelete(uuid) {
     if (!isConfigured()) return;
-    enqueue({ kind: "escrito", op: "delete", uuid, ts: new Date().toISOString() });
+    const syncUuid = normalizeSyncUuid(uuid);
+    if (!syncUuid) return;
+    enqueue({ kind: "escrito", op: "delete", uuid: syncUuid, ts: new Date().toISOString() });
     scheduleFlush();
   }
   function onParrafoUpsert(p) {
     if (!isConfigured()) return;
+    const syncUuid = ensureSyncUuid(p);
     enqueue({
       kind: "parrafo", op: "upsert",
-      uuid: p.id,
-      payload: { uuid: p.id, nombre: p.nombre, contenido: p.contenido },
+      uuid: syncUuid,
+      payload: { uuid: syncUuid, nombre: p.nombre, contenido: p.contenido },
       ts: new Date().toISOString()
     });
     scheduleFlush();
   }
   function onParrafoDelete(uuid) {
     if (!isConfigured()) return;
-    enqueue({ kind: "parrafo", op: "delete", uuid, ts: new Date().toISOString() });
+    const syncUuid = normalizeSyncUuid(uuid);
+    if (!syncUuid) return;
+    enqueue({ kind: "parrafo", op: "delete", uuid: syncUuid, ts: new Date().toISOString() });
     scheduleFlush();
   }
   function onModuloUpsert(m) {
     if (!isConfigured()) return;
+    const syncUuid = ensureSyncUuid(m);
     enqueue({
       kind: "modulo", op: "upsert",
-      uuid: m.id,
-      payload: { uuid: m.id, nombre: m.nombre || "", contenido: m.contenido || "" },
+      uuid: syncUuid,
+      payload: { uuid: syncUuid, nombre: m.nombre || "", contenido: m.contenido || "" },
       ts: new Date().toISOString()
     });
     scheduleFlush();
   }
   function onModuloDelete(uuid) {
     if (!isConfigured()) return;
-    enqueue({ kind: "modulo", op: "delete", uuid, ts: new Date().toISOString() });
+    const syncUuid = normalizeSyncUuid(uuid);
+    if (!syncUuid) return;
+    enqueue({ kind: "modulo", op: "delete", uuid: syncUuid, ts: new Date().toISOString() });
     scheduleFlush();
   }
 
@@ -1636,12 +1665,13 @@ const Sync = (() => {
     if (!st.otrosiesSeededToTablaOtrosiesV2) {
       (state.bibliotecaOtrosies || []).forEach(o => {
         if (!o || !o.id) return;
+        const syncUuid = ensureSyncUuid(o);
         enqueue({
           kind: "otrosi",
           op: "upsert",
-          uuid: o.id,
+          uuid: syncUuid,
           payload: {
-            uuid: o.id,
+            uuid: syncUuid,
             nombre: toOtrosiModuloNombre(o.titulo),
             contenido: toOtrosiModuloContenido(o.contenido)
           },
@@ -2299,7 +2329,7 @@ function parseModulosDocxHtml(html) {
     if (tag === "h1" || tag === "h2" || moduloLine) {
       if (actual && actual.contenido.trim()) mods.push(actual);
       const nombre = moduloLine ? moduloLine[1].trim() : (el.textContent || "Módulo").trim();
-      actual = { id: "moddocx-" + uuid(), nombre, contenido: "" };
+      actual = { id: uuid(), nombre, contenido: "" };
       return;
     }
     if (!actual) return;
@@ -2916,6 +2946,7 @@ function renderSidebarModulos() {
       <div class="content">${rich2br(m.contenido || "")}</div>
       <div class="actions-row">
         <button type="button" class="btn small primary" data-sidebar-add="${escapeHtml(m.id)}">+ Agregar al escrito</button>
+        <button type="button" class="btn small danger" data-sidebar-del-mod="${escapeHtml(m.id)}">Eliminar</button>
       </div>`;
     wrap.appendChild(item);
   });
@@ -3486,7 +3517,7 @@ function bindParrafosEvents() {
     const now = new Date().toISOString();
     let item = state.bibliotecaParrafos.find(x => x.id === state.parrafoSeleccionadoId);
     if (!item) {
-      item = { id: "parrafo-" + uuid(), creadoEn: now, actualizadoEn: now, nombre: nom, contenido };
+      item = { id: uuid(), creadoEn: now, actualizadoEn: now, nombre: nom, contenido };
       state.bibliotecaParrafos.push(item);
       state.parrafoSeleccionadoId = item.id;
     } else {
@@ -3571,7 +3602,7 @@ function bindParrafosEvents() {
         item.contenido = contenidoMod;
         item.actualizadoEn = now;
       } else {
-        item = { id: "mod-" + uuid(), nombre: nombreMod, contenido: contenidoMod, creadoEn: now, actualizadoEn: now };
+        item = { id: uuid(), nombre: nombreMod, contenido: contenidoMod, creadoEn: now, actualizadoEn: now };
         state.bibliotecaModulos.push(item);
       }
       dedupeModulos();
@@ -3828,22 +3859,44 @@ function bindSidebarModulosEvents() {
   tabs.forEach(btn => btn.addEventListener("click", () => setSidebarTab(btn.dataset.sidebarTab || "modulos")));
   list.addEventListener("click", e => {
     const btn = e.target.closest("[data-sidebar-add]");
-    if (!btn) return;
-    const modId = btn.dataset.sidebarAdd || "";
+    if (btn) {
+      const modId = btn.dataset.sidebarAdd || "";
+      const mod = state.bibliotecaModulos.find(x => x.id === modId);
+      if (!mod) return;
+      state.modulosEscritoActual.push({
+        tipo: "modulo_txt",
+        moduloId: mod.id,
+        nombreSnapshot: mod.nombre || "",
+        contenidoSnapshot: mod.contenido || ""
+      });
+      state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
+      recomputeCuerpoFromModulos();
+      renderModulosEscrito();
+      renderCamposVariables();
+      updatePreview();
+      showStatus("Módulo agregado al escrito.", "ok");
+      return;
+    }
+    const delBtn = e.target.closest("[data-sidebar-del-mod]");
+    if (!delBtn) return;
+    const modId = delBtn.dataset.sidebarDelMod || "";
     const mod = state.bibliotecaModulos.find(x => x.id === modId);
     if (!mod) return;
-    state.modulosEscritoActual.push({
-      tipo: "modulo_txt",
-      moduloId: mod.id,
-      nombreSnapshot: mod.nombre || "",
-      contenidoSnapshot: mod.contenido || ""
-    });
-    state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
+    if (!window.confirm(`¿Eliminar módulo «${mod.nombre || "Sin nombre"}» de la biblioteca?`)) return;
+    state.bibliotecaModulos = state.bibliotecaModulos.filter(x => x.id !== modId);
+    state.modulosEscritoActual = state.modulosEscritoActual.filter(m => !(m && m.tipo === "modulo_txt" && m.moduloId === modId));
+    if (state.moduloSeleccionadoIdx != null && state.moduloSeleccionadoIdx >= state.modulosEscritoActual.length) {
+      state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? state.modulosEscritoActual.length - 1 : null;
+    }
+    saveBibliotecaModulos();
+    Sync.onModuloDelete(modId);
+    syncInstant();
     recomputeCuerpoFromModulos();
+    renderSidebarModulos();
     renderModulosEscrito();
     renderCamposVariables();
     updatePreview();
-    showStatus("Módulo agregado al escrito.", "ok");
+    showStatus("Módulo eliminado de la biblioteca.", "ok");
   });
   listOtrosies.addEventListener("click", e => {
     const addBtn = e.target.closest("[data-sidebar-add-otrosi]");
@@ -4391,7 +4444,7 @@ function guardarTipoEscritoActual() {
   const now = new Date().toISOString();
   const modelo = existente
     ? Object.assign(existente, payload, { actualizadoEn: now })
-    : Object.assign({ id: "tpl-escrito-" + uuid(), creadoEn: now, actualizadoEn: now }, payload);
+    : Object.assign({ id: uuid(), creadoEn: now, actualizadoEn: now }, payload);
   if (!existente) state.bibliotecaEscritos.push(modelo);
   dedupeBibliotecas();
   saveBibliotecaEscritos();
