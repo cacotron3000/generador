@@ -522,6 +522,9 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     <p class="muted" style="margin-top:0;">
       Catálogo de módulos cargados desde DOCX. Inserte desde aquí al escrito actual.
     </p>
+    <div class="field" style="margin-bottom:8px;">
+      <input type="text" id="modulosSearchInput" placeholder="Buscar módulo por nombre o contenido…">
+    </div>
     <div id="bibliotecaModulosList"></div>
   </div>
 </div>
@@ -2560,13 +2563,24 @@ function renderParrafosBiblioteca() {
 
 function renderBibliotecaModulos() {
   const wrap = document.getElementById("bibliotecaModulosList");
+  const search = document.getElementById("modulosSearchInput");
   if (!wrap) return;
+  const term = ((search && search.value) || "").trim().toLowerCase();
   wrap.innerHTML = "";
   if (!state.bibliotecaModulos.length) {
     wrap.innerHTML = `<p style="color:var(--muted); font-size:12px;">No hay módulos cargados aún. Use “Cargar/recargar módulos desde DOCX”.</p>`;
     return;
   }
-  state.bibliotecaModulos.forEach((m, i) => {
+  const items = state.bibliotecaModulos.filter(m => {
+    if (!term) return true;
+    const haystack = `${(m.nombre || "").toLowerCase()} ${(stripHtmlWithLineBreaks(m.contenido || "").toLowerCase())}`;
+    return haystack.includes(term);
+  });
+  if (!items.length) {
+    wrap.innerHTML = `<p style="color:var(--muted); font-size:12px;">No se encontraron módulos para “${escapeHtml(term)}”.</p>`;
+    return;
+  }
+  items.forEach((m, i) => {
     const item = document.createElement("div");
     item.className = "lib-item";
     item.innerHTML = `
@@ -2574,6 +2588,7 @@ function renderBibliotecaModulos() {
       <div class="content">${rich2br(m.contenido || "")}</div>
       <div class="actions-row">
         <button type="button" class="btn primary small" data-mod-insert="${escapeHtml(m.id)}">Insertar en el escrito</button>
+        <button type="button" class="btn small danger" data-mod-del-lib="${escapeHtml(m.id)}">Eliminar</button>
       </div>`;
     wrap.appendChild(item);
   });
@@ -2599,8 +2614,7 @@ function recomputeCuerpoFromModulos() {
     if (!contenido) return `<div><span class="bold">[MÓDULO ELIMINADO]</span></div>`;
     return `<div style="font-family:Tahoma; font-size:11pt; line-height:1.5;">${contenido}</div>`;
   }).filter(Boolean);
-  if (!blocks.length) return;
-  state.cuerpoPrincipal = blocks.join("<br>");
+  state.cuerpoPrincipal = blocks.length ? blocks.join("<br>") : "";
   state.cuerpoCustom = true;
   const ed = document.getElementById("cuerpoPrincipalEditor");
   if (ed) ed.innerHTML = state.cuerpoPrincipal;
@@ -3271,8 +3285,11 @@ function bindBibliotecaParrafosEvents() {
 }
 
 function openBibliotecaModulos() {
+  const search = document.getElementById("modulosSearchInput");
+  if (search) search.value = "";
   renderBibliotecaModulos();
   document.getElementById("modalModulosBackdrop").classList.add("open");
+  if (search) search.focus();
 }
 function closeBibliotecaModulos() {
   document.getElementById("modalModulosBackdrop").classList.remove("open");
@@ -3282,27 +3299,49 @@ function bindBibliotecaModulosEvents() {
   const closeBtn = document.getElementById("modalModulosClose");
   const backdrop = document.getElementById("modalModulosBackdrop");
   const list = document.getElementById("bibliotecaModulosList");
-  if (!openBtn || !closeBtn || !backdrop || !list) return;
+  const search = document.getElementById("modulosSearchInput");
+  if (!openBtn || !closeBtn || !backdrop || !list || !search) return;
   openBtn.addEventListener("click", openBibliotecaModulos);
   closeBtn.addEventListener("click", closeBibliotecaModulos);
   backdrop.addEventListener("click", e => {
     if (e.target.id === "modalModulosBackdrop") closeBibliotecaModulos();
   });
+  search.addEventListener("input", () => renderBibliotecaModulos());
   list.addEventListener("click", e => {
     const btn = e.target.closest("[data-mod-insert]");
-    if (!btn) return;
-    const modId = btn.dataset.modInsert || "";
+    if (btn) {
+      const modId = btn.dataset.modInsert || "";
+      const mod = state.bibliotecaModulos.find(x => x.id === modId);
+      if (!mod) return;
+      state.moduloSeleccionadoId = mod.id;
+      state.modulosEscritoActual.push({ tipo: "modulo_txt", moduloId: mod.id });
+      state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
+      recomputeCuerpoFromModulos();
+      renderModulosEscrito();
+      renderCamposVariables();
+      updatePreview();
+      showStatus("Módulo insertado en el escrito.", "ok");
+      closeBibliotecaModulos();
+      return;
+    }
+    const delBtn = e.target.closest("[data-mod-del-lib]");
+    if (!delBtn) return;
+    const modId = delBtn.dataset.modDelLib || "";
     const mod = state.bibliotecaModulos.find(x => x.id === modId);
     if (!mod) return;
-    state.moduloSeleccionadoId = mod.id;
-    state.modulosEscritoActual.push({ tipo: "modulo_txt", moduloId: mod.id });
-    state.moduloSeleccionadoIdx = state.modulosEscritoActual.length - 1;
+    if (!window.confirm(`¿Eliminar módulo «${mod.nombre || "Sin nombre"}» de la biblioteca?`)) return;
+    state.bibliotecaModulos = state.bibliotecaModulos.filter(x => x.id !== modId);
+    state.modulosEscritoActual = state.modulosEscritoActual.filter(m => !(m && m.tipo === "modulo_txt" && m.moduloId === modId));
+    if (state.moduloSeleccionadoIdx != null && state.moduloSeleccionadoIdx >= state.modulosEscritoActual.length) {
+      state.moduloSeleccionadoIdx = state.modulosEscritoActual.length ? state.modulosEscritoActual.length - 1 : null;
+    }
+    saveBibliotecaModulos();
     recomputeCuerpoFromModulos();
+    renderBibliotecaModulos();
     renderModulosEscrito();
     renderCamposVariables();
     updatePreview();
-    showStatus("Módulo insertado en el escrito.", "ok");
-    closeBibliotecaModulos();
+    showStatus("Módulo eliminado de la biblioteca.", "ok");
   });
 }
 
