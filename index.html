@@ -1022,7 +1022,6 @@ function buildDocxDocument() {
     if (!parsed.length) parsed.push([{ text: "" }]);
     const firstRuns = [
       { text: ordinalOtrosi(i+1) + ": ", bold: true },
-      { text: applyVariablesToText((o.titulo||"").trim() || "[TÍTULO]", `otrosiTitulo:${i}`) + ". ", bold: true },
       ...parsed[0]
     ];
     paras.push(dxP(dxRuns(firstRuns), { align: "both", indent: 720 }));
@@ -1944,9 +1943,23 @@ function groupGender(people) {
   return "MIX";
 }
 const ORDINALES_OTROSI = ["PRIMER","SEGUNDO","TERCER","CUARTO","QUINTO","SEXTO","SÉPTIMO","OCTAVO","NOVENO","DÉCIMO","UNDÉCIMO","DUODÉCIMO"];
-function ordinalOtrosi(n) {
+function ordinalOtrosi(n, total) {
+  const t = Number.isFinite(total) ? total : ((state && state.otrosies && state.otrosies.length) || 0);
+  if (t === 1) return "OTROSÍ";
   const w = ORDINALES_OTROSI[n-1];
   return (w ? w : `${n}.º`) + " OTROSÍ";
+}
+function isOtrosiLibre(o) {
+  if (!o) return true;
+  const titulo = String(o.titulo || "").trim();
+  const contenido = stripHtmlWithLineBreaks(String(o.contenido || "")).trim();
+  return !titulo && !contenido;
+}
+function insertarOtrosiEnOrden(o) {
+  const nuevo = { id: uuid(), titulo: o.titulo || "", contenido: o.contenido || "" };
+  const idxLibre = (state.otrosies || []).findIndex(isOtrosiLibre);
+  if (idxLibre === -1) state.otrosies.push(nuevo);
+  else state.otrosies.splice(idxLibre, 0, nuevo);
 }
 function uuid() {
   // Simple UUID
@@ -2988,9 +3001,8 @@ function buildPetitorioHtml() {
 
 function buildOtrosiesHtml() {
   return state.otrosies.map((o, i) => {
-    const titulo = applyVariablesToHtml(escapeHtml((o.titulo||"").trim() || "[TÍTULO]"), `otrosiTitulo:${i}`);
     const contenido = applyVariablesToHtml(rich2br(o.contenido || ""), `otrosiContenido:${i}`);
-    return `<p class="indent"><span class="bold">${ordinalOtrosi(i+1)}:</span> <span class="otrosi-title">${titulo}.</span> ${contenido}</p>`;
+    return `<p class="indent"><span class="bold">${ordinalOtrosi(i+1)}:</span> ${contenido}</p>`;
   }).join("");
 }
 
@@ -3036,9 +3048,8 @@ function buildExportHtml(includeLogos) {
   const cuerpo = buildCuerpoPrincipalHtml();
   const petitorio = buildPetitorioHtml();
   const otrosiesArr = state.otrosies.map((o, i) => {
-    const titulo = escapeHtml((o.titulo||"").trim() || "[TÍTULO]");
     const contenido = rich2br(o.contenido || "");
-    return `<p style="${baseStyle} ${indent}"><b>${ordinalOtrosi(i+1)}:</b> <b>${titulo}.</b> ${contenido}</p>`;
+    return `<p style="${baseStyle} ${indent}"><b>${ordinalOtrosi(i+1)}:</b> ${contenido}</p>`;
   }).join("");
 
   const body = `
@@ -3729,7 +3740,7 @@ function bindSidebarModulosEvents() {
       const id = addBtn.dataset.sidebarAddOtrosi || "";
       const o = state.bibliotecaOtrosies.find(x => x.id === id);
       if (!o) return;
-      state.otrosies.push({ id: uuid(), titulo: o.titulo || "", contenido: o.contenido || "" });
+      insertarOtrosiEnOrden(o);
       renderOtrosies();
       updatePreview();
       showStatus("Otrosí agregado al escrito.", "ok");
@@ -4146,7 +4157,7 @@ function bindBibliotecaEvents() {
     if (el.dataset.insert != null) {
       const i = parseInt(el.dataset.insert, 10);
       const o = state.bibliotecaOtrosies[i];
-      state.otrosies.push({ id: uuid(), titulo: o.titulo, contenido: o.contenido });
+      insertarOtrosiEnOrden(o || {});
       renderOtrosies();
       updatePreview();
       showStatus("Otrosí insertado.", "ok");
