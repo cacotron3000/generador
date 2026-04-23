@@ -104,6 +104,8 @@ h1 {
 .sidebar-tab.active { color: var(--accent-hover); border-bottom: 2px solid var(--accent-hover); background: #fff; }
 .modules-sidebar .inner { padding: 10px; max-height: calc(100vh - 240px); overflow: auto; }
 .sidebar-card .content { max-height: 48px; }
+.sidebar-pane { display: none; }
+.sidebar-pane.active { display: block; }
 
 .panel {
   background: var(--panel);
@@ -350,12 +352,19 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
       </div>
     </div>
     <div class="sidebar-tabs">
-      <button type="button" class="sidebar-tab active">Módulos</button>
-      <button type="button" class="sidebar-tab" id="openBibliotecaFromSidebar">Otrosíes</button>
+      <button type="button" class="sidebar-tab active" data-sidebar-tab="modulos">Módulos</button>
+      <button type="button" class="sidebar-tab" data-sidebar-tab="otrosies">Otrosíes</button>
     </div>
-    <div class="inner">
+    <div class="inner sidebar-pane active" id="sidebarPaneModulos">
       <button type="button" class="btn small" id="btnCargarModulosDocxSidebar">Cargar plantilla (.txt/.docx)</button>
       <div id="sidebarModulosList" style="margin-top:10px;"></div>
+    </div>
+    <div class="inner sidebar-pane" id="sidebarPaneOtrosies">
+      <div class="field">
+        <label style="font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);">Buscar otrosí</label>
+        <input type="text" id="sidebarOtrosiesSearch" placeholder="Buscar otrosí por título o contenido...">
+      </div>
+      <div id="sidebarOtrosiesList"></div>
     </div>
   </div>
 
@@ -1457,33 +1466,38 @@ const Sync = (() => {
       saveBibliotecaEscritos();
     }
 
-    // Párrafos
-    const pa = await apiFetch("/parrafos.php?since=" + encodeURIComponent(since));
-    const pByIdLocal = new Map(state.bibliotecaParrafos.map(p => [p.id, p]));
-    (pa.parrafos || []).forEach(srv => {
-      if (srv.eliminadoEn) {
-        const before = state.bibliotecaParrafos.length;
-        state.bibliotecaParrafos = state.bibliotecaParrafos.filter(p => p.id !== srv.uuid);
-        if (state.bibliotecaParrafos.length !== before) parrafosChanged++;
-      } else {
-        const local = pByIdLocal.get(srv.uuid);
-        const srvTs = Date.parse(srv.actualizadoEn || 0);
-        const locTs = local ? Date.parse(local.actualizadoEn || 0) : 0;
-        if (!local || srvTs > locTs) {
-          const merged = {
-            id: srv.uuid,
-            nombre: srv.nombre || "",
-            contenido: srv.contenido || "",
-            creadoEn: srv.creadoEn,
-            actualizadoEn: srv.actualizadoEn
-          };
-          if (local) Object.assign(local, merged);
-          else state.bibliotecaParrafos.push(merged);
-          parrafosChanged++;
+    // Párrafos (opcional: no bloquea si el endpoint no existe en un despliegue antiguo)
+    let pa = { parrafos: [], server_time: null };
+    try {
+      pa = await apiFetch("/parrafos.php?since=" + encodeURIComponent(since));
+      const pByIdLocal = new Map(state.bibliotecaParrafos.map(p => [p.id, p]));
+      (pa.parrafos || []).forEach(srv => {
+        if (srv.eliminadoEn) {
+          const before = state.bibliotecaParrafos.length;
+          state.bibliotecaParrafos = state.bibliotecaParrafos.filter(p => p.id !== srv.uuid);
+          if (state.bibliotecaParrafos.length !== before) parrafosChanged++;
+        } else {
+          const local = pByIdLocal.get(srv.uuid);
+          const srvTs = Date.parse(srv.actualizadoEn || 0);
+          const locTs = local ? Date.parse(local.actualizadoEn || 0) : 0;
+          if (!local || srvTs > locTs) {
+            const merged = {
+              id: srv.uuid,
+              nombre: srv.nombre || "",
+              contenido: srv.contenido || "",
+              creadoEn: srv.creadoEn,
+              actualizadoEn: srv.actualizadoEn
+            };
+            if (local) Object.assign(local, merged);
+            else state.bibliotecaParrafos.push(merged);
+            parrafosChanged++;
+          }
         }
-      }
-    });
-    if (parrafosChanged) saveBibliotecaParrafos();
+      });
+      if (parrafosChanged) saveBibliotecaParrafos();
+    } catch (e) {
+      console.warn("Sync: endpoint /parrafos.php no disponible o con error; se omite su pull.", e);
+    }
 
     // Módulos
     const mo = await apiFetch("/modulos.php?since=" + encodeURIComponent(since));
@@ -2292,6 +2306,7 @@ function renderAll() {
   renderSumaBody();
   renderBibliotecaModulos();
   renderSidebarModulos();
+  renderSidebarOtrosies();
   renderModulosEscrito();
   renderCamposVariables();
   renderOtrosies();
@@ -2721,6 +2736,43 @@ function renderSidebarModulos() {
       </div>`;
     wrap.appendChild(item);
   });
+}
+
+function renderSidebarOtrosies() {
+  const wrap = document.getElementById("sidebarOtrosiesList");
+  const search = document.getElementById("sidebarOtrosiesSearch");
+  if (!wrap) return;
+  const term = ((search && search.value) || "").trim().toLowerCase();
+  const items = (state.bibliotecaOtrosies || []).filter(o => {
+    if (!term) return true;
+    return `${(o.titulo || "").toLowerCase()} ${(stripHtmlWithLineBreaks(o.contenido || "").toLowerCase())}`.includes(term);
+  });
+  wrap.innerHTML = "";
+  if (!items.length) {
+    wrap.innerHTML = `<p style="color:var(--muted); font-size:12px;">No hay otrosíes para mostrar.</p>`;
+    return;
+  }
+  items.forEach((o, i) => {
+    const item = document.createElement("div");
+    item.className = "lib-item sidebar-card";
+    item.innerHTML = `
+      <div class="title">${escapeHtml(o.titulo || `Otrosí ${i+1}`)}</div>
+      <div class="content">${rich2br(o.contenido || "")}</div>
+      <div class="actions-row">
+        <button type="button" class="btn small primary" data-sidebar-add-otrosi="${escapeHtml(o.id)}">+ Agregar al escrito</button>
+        <button type="button" class="btn small danger" data-sidebar-del-otrosi="${escapeHtml(o.id)}">Eliminar</button>
+      </div>`;
+    wrap.appendChild(item);
+  });
+}
+
+function setSidebarTab(tab) {
+  const tabs = document.querySelectorAll("[data-sidebar-tab]");
+  tabs.forEach(btn => btn.classList.toggle("active", btn.dataset.sidebarTab === tab));
+  const mod = document.getElementById("sidebarPaneModulos");
+  const otr = document.getElementById("sidebarPaneOtrosies");
+  if (mod) mod.classList.toggle("active", tab === "modulos");
+  if (otr) otr.classList.toggle("active", tab === "otrosies");
 }
 
 function getModuloContenidoByItem(m) {
@@ -3488,14 +3540,17 @@ function bindBibliotecaModulosEvents() {
 
 function bindSidebarModulosEvents() {
   const search = document.getElementById("sidebarModulosSearch");
+  const searchOtrosies = document.getElementById("sidebarOtrosiesSearch");
   const list = document.getElementById("sidebarModulosList");
+  const listOtrosies = document.getElementById("sidebarOtrosiesList");
   const btnDocx = document.getElementById("btnCargarModulosDocxSidebar");
-  const btnOtrosi = document.getElementById("openBibliotecaFromSidebar");
   const docxFile = document.getElementById("modulosDocxFile");
-  if (!search || !list || !btnDocx || !docxFile || !btnOtrosi) return;
+  const tabs = document.querySelectorAll("[data-sidebar-tab]");
+  if (!search || !searchOtrosies || !list || !listOtrosies || !btnDocx || !docxFile) return;
   search.addEventListener("input", renderSidebarModulos);
+  searchOtrosies.addEventListener("input", renderSidebarOtrosies);
   btnDocx.addEventListener("click", () => docxFile.click());
-  btnOtrosi.addEventListener("click", openBiblioteca);
+  tabs.forEach(btn => btn.addEventListener("click", () => setSidebarTab(btn.dataset.sidebarTab || "modulos")));
   list.addEventListener("click", e => {
     const btn = e.target.closest("[data-sidebar-add]");
     if (!btn) return;
@@ -3514,6 +3569,31 @@ function bindSidebarModulosEvents() {
     renderCamposVariables();
     updatePreview();
     showStatus("Módulo agregado al escrito.", "ok");
+  });
+  listOtrosies.addEventListener("click", e => {
+    const addBtn = e.target.closest("[data-sidebar-add-otrosi]");
+    if (addBtn) {
+      const id = addBtn.dataset.sidebarAddOtrosi || "";
+      const o = state.bibliotecaOtrosies.find(x => x.id === id);
+      if (!o) return;
+      state.otrosies.push({ id: uuid(), titulo: o.titulo || "", contenido: o.contenido || "" });
+      renderOtrosies();
+      updatePreview();
+      showStatus("Otrosí agregado al escrito.", "ok");
+      return;
+    }
+    const delBtn = e.target.closest("[data-sidebar-del-otrosi]");
+    if (!delBtn) return;
+    const id = delBtn.dataset.sidebarDelOtrosi || "";
+    const o = state.bibliotecaOtrosies.find(x => x.id === id);
+    if (!o) return;
+    if (!window.confirm(`¿Eliminar «${o.titulo || "Otrosí"}» de la biblioteca?`)) return;
+    state.bibliotecaOtrosies = state.bibliotecaOtrosies.filter(x => x.id !== id);
+    saveBiblioteca();
+    Sync.onOtrosiDelete(id);
+    syncInstant();
+    renderSidebarOtrosies();
+    showStatus("Otrosí eliminado de la biblioteca.", "ok");
   });
 }
 
@@ -3687,7 +3767,11 @@ function bindOtrosiesEvents() {
     renderOtrosies();
     updatePreview();
   });
-  document.getElementById("openBiblioteca").addEventListener("click", () => { openBiblioteca(); });
+  document.getElementById("openBiblioteca").addEventListener("click", () => {
+    setSidebarTab("otrosies");
+    const search = document.getElementById("sidebarOtrosiesSearch");
+    if (search) search.focus();
+  });
 }
 
 // =============== PLANTILLAS (encabezado) ===============
@@ -4311,6 +4395,7 @@ async function init() {
     renderBibliotecaEscritos();
     renderBibliotecaModulos();
     renderSidebarModulos();
+    renderSidebarOtrosies();
     renderModulosEscrito();
     updatePreview();
     const det = (ev && ev.detail) || {};
