@@ -2130,10 +2130,8 @@ function loadFromStorage() {
   state.plantillas = [];
   state.bibliotecaOtrosies = [];
   state.bibliotecaEscritos = [];
-  try { state.bibliotecaParrafos = JSON.parse(localStorage.getItem(LS.bibliotecaParrafos) || "[]") || []; }
-  catch (e) { state.bibliotecaParrafos = []; }
-  try { state.bibliotecaModulos = JSON.parse(localStorage.getItem(LS.bibliotecaModulos) || "[]") || []; }
-  catch (e) { state.bibliotecaModulos = []; }
+  state.bibliotecaParrafos = [];
+  state.bibliotecaModulos = [];
 }
 function savePlantillas()  { localStorage.setItem(LS.plantillas, JSON.stringify(state.plantillas)); }
 function saveBiblioteca()  { localStorage.setItem(LS.biblioteca, JSON.stringify(state.bibliotecaOtrosies)); }
@@ -4352,6 +4350,12 @@ function bindSyncEvents() {
 async function init() {
   await loadPalabrasRecurrentes();
   loadFromStorage();
+  // Fuente de verdad de módulos: cPanel (no localStorage).
+  // Si hay sincronización configurada, primero hacemos sync para poblar catálogos.
+  if (Sync.isConfigured()) {
+    try { await Sync.syncNow(); }
+    catch (e) { console.warn("Sync inicial previo a render falló:", e); }
+  }
   await loadModulosDesdeDocx();
   syncTiposDesdeBiblioteca();
   const t = tipoById(state.tipoEscritoId);
@@ -4430,8 +4434,8 @@ async function init() {
   renderSyncChip();
   if (Sync.isConfigured()) {
     Sync.startAuto();
-    Sync.syncNow().then(() => { renderAll(); renderSyncChip(); })
-                  .catch(err => { console.warn("Sync inicial falló:", err); renderSyncChip(); });
+    renderAll();
+    renderSyncChip();
   }
 }
 document.addEventListener("DOMContentLoaded", init);
