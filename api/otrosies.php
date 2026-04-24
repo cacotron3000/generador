@@ -23,7 +23,7 @@ try {
             if (isset($_GET['uuid'])) {
                 $uuid = (string)$_GET['uuid'];
                 if (!is_uuid($uuid)) json_error(400, 'uuid inválido.');
-                $st = $pdo->prepare("SELECT uuid, titulo, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE uuid = ?");
+                $st = $pdo->prepare("SELECT uuid, titulo, nombre, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE uuid = ?");
                 $st->execute([$uuid]);
                 $row = $st->fetch();
                 if (!$row) json_error(404, 'No encontrado.');
@@ -32,12 +32,12 @@ try {
             if (isset($_GET['since'])) {
                 $since = parse_iso_to_datetime((string)$_GET['since']);
                 if ($since === null) json_error(400, 'since inválido (ISO 8601 UTC).');
-                $st = $pdo->prepare("SELECT uuid, titulo, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE actualizado_en >= ? ORDER BY actualizado_en ASC");
+                $st = $pdo->prepare("SELECT uuid, titulo, nombre, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE actualizado_en >= ? ORDER BY actualizado_en ASC");
                 $st->execute([$since]);
                 $rows = array_map('format_row', $st->fetchAll());
                 json_response(200, ['otrosies' => $rows, 'server_time' => fmt_datetime_utc(gmdate('Y-m-d H:i:s.') . '000')]);
             }
-            $rows = $pdo->query("SELECT uuid, titulo, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE eliminado_en IS NULL ORDER BY actualizado_en DESC")->fetchAll();
+            $rows = $pdo->query("SELECT uuid, titulo, nombre, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE eliminado_en IS NULL ORDER BY actualizado_en DESC")->fetchAll();
             json_response(200, ['otrosies' => array_map('format_row', $rows)]);
             break;
 
@@ -47,19 +47,20 @@ try {
             $titulo    = trim((string)($data['titulo'] ?? ''));
             $contenido = (string)($data['contenido'] ?? '');
             if ($titulo === '')    json_error(400, 'Falta "titulo".');
-            if ($contenido === '') json_error(400, 'Falta "contenido".');
+            // contenido puede ir vacío
 
             $st = $pdo->prepare("
-                INSERT INTO otrosies_biblioteca (uuid, titulo, contenido)
-                VALUES (?, ?, ?)
+                INSERT INTO otrosies_biblioteca (uuid, titulo, nombre, contenido)
+                VALUES (?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                   titulo = VALUES(titulo),
+                  nombre = CASE WHEN VALUES(nombre) <> '' THEN VALUES(nombre) ELSE nombre END,
                   contenido = VALUES(contenido),
                   eliminado_en = NULL
             ");
-            $st->execute([$uuid, $titulo, $contenido]);
+            $st->execute([$uuid, $titulo, $titulo, $contenido]);
 
-            $st2 = $pdo->prepare("SELECT uuid, titulo, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE uuid = ?");
+            $st2 = $pdo->prepare("SELECT uuid, titulo, nombre, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE uuid = ?");
             $st2->execute([$uuid]);
             json_response(201, format_row($st2->fetch()));
             break;
@@ -73,10 +74,11 @@ try {
                 $titulo = trim((string)$data['titulo']);
                 if ($titulo === '') json_error(400, '"titulo" no puede estar vacío.');
                 $sets[] = 'titulo = ?'; $args[] = $titulo;
+                $sets[] = 'nombre = CASE WHEN ? <> "" THEN ? ELSE nombre END';
+                $args[] = $titulo; $args[] = $titulo;
             }
             if (isset($data['contenido'])) {
                 $contenido = (string)$data['contenido'];
-                if ($contenido === '') json_error(400, '"contenido" no puede estar vacío.');
                 $sets[] = 'contenido = ?'; $args[] = $contenido;
             }
             if (!$sets) json_error(400, 'Nada que actualizar.');
@@ -88,7 +90,7 @@ try {
                 $chk->execute([$uuid]);
                 if (!$chk->fetchColumn()) json_error(404, 'No encontrado.');
             }
-            $st2 = $pdo->prepare("SELECT uuid, titulo, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE uuid = ?");
+            $st2 = $pdo->prepare("SELECT uuid, titulo, nombre, contenido, creado_en, actualizado_en, eliminado_en FROM otrosies_biblioteca WHERE uuid = ?");
             $st2->execute([$uuid]);
             json_response(200, format_row($st2->fetch()));
             break;
@@ -123,8 +125,8 @@ function format_row(array $row): array
 {
     return [
         'uuid'          => $row['uuid'],
-        'titulo'        => $row['titulo'],
-        'contenido'     => $row['contenido'],
+        'titulo'        => ($row['titulo'] ?? '') !== '' ? $row['titulo'] : ($row['nombre'] ?? ''),
+        'contenido'     => $row['contenido'] ?? '',
         'creadoEn'      => fmt_datetime_utc($row['creado_en']),
         'actualizadoEn' => fmt_datetime_utc($row['actualizado_en']),
         'eliminadoEn'   => fmt_datetime_utc($row['eliminado_en']),
