@@ -381,7 +381,6 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
     </div>
     <div class="actions" id="plantillaCausaActions">
       <label style="margin:0;">Plantilla de causa</label>
-      <input type="text" id="plantillaSelectorSearch" placeholder="Buscar plantilla de causa..." style="min-width:220px; width:auto;">
       <select id="plantillaSelector" style="min-width:260px; width:auto;"></select>
       <button class="btn small" id="btnGuardarPlantilla">Guardar</button>
       <button class="btn small" id="btnDuplicarPlantilla">Duplicar</button>
@@ -412,7 +411,6 @@ button.btn.small { padding: 5px 9px; font-size: 12px; }
 
     <h2 class="spaced">Tipo de escrito</h2>
     <div class="field">
-      <input type="text" id="tipoEscritoSearch" placeholder="Buscar tipo de escrito..." style="margin-bottom:6px;">
       <select id="tipoEscrito"></select>
     </div>
 
@@ -2279,6 +2277,8 @@ const state = {
   numeroCausa: "",
   parte: "demandada",
   modalidadComparecencia: "mero-tramite",
+  tipoEscritoSearchTerm: "",
+  plantillaSearchTerm: "",
   clientes: [ { nombre:"", nacionalidad:"", estadoCivil:"", profesion:"", rut:"", domicilio:"", genero:"M" } ],
   delegantes: [ { nombre:"", genero:"M" } ],
   delegados:  [ { nombre:"", rut:"", genero:"M", domicilio:"" } ],
@@ -2491,8 +2491,7 @@ function renderAll() {
 
 function renderTipoSelector() {
   const sel = document.getElementById("tipoEscrito");
-  const searchInput = document.getElementById("tipoEscritoSearch");
-  const term = ((searchInput && searchInput.value) || "").trim().toLowerCase();
+  const term = String(state.tipoEscritoSearchTerm || "").trim().toLowerCase();
   sel.innerHTML = "";
   const seenIds = new Set();
   const tiposUnicos = TIPOS.filter(t => {
@@ -2518,8 +2517,7 @@ function renderTipoSelector() {
 
 function renderPlantillaSelector() {
   const sel = document.getElementById("plantillaSelector");
-  const searchInput = document.getElementById("plantillaSelectorSearch");
-  const term = ((searchInput && searchInput.value) || "").trim().toLowerCase();
+  const term = String(state.plantillaSearchTerm || "").trim().toLowerCase();
   sel.innerHTML = "";
   const optNew = document.createElement("option");
   optNew.value = ""; optNew.textContent = "— Nueva causa (sin plantilla) —";
@@ -3250,16 +3248,36 @@ function bindEncabezadoEvents() {
 }
 
 function bindTipoEscritoEvent() {
-  document.getElementById("tipoEscrito").addEventListener("change", e => {
+  const selTipo = document.getElementById("tipoEscrito");
+  let tipoSearchTimer = null;
+  selTipo.addEventListener("change", e => {
     const nuevoId = e.target.value;
     cambiarTipoEscrito(nuevoId);
   });
-  const search = document.getElementById("tipoEscritoSearch");
-  if (search) {
-    search.addEventListener("input", () => {
+  selTipo.addEventListener("keydown", e => {
+    const k = e.key || "";
+    if (k === "Escape") {
+      state.tipoEscritoSearchTerm = "";
       renderTipoSelector();
-    });
-  }
+      return;
+    }
+    if (k === "Backspace") {
+      e.preventDefault();
+      state.tipoEscritoSearchTerm = String(state.tipoEscritoSearchTerm || "").slice(0, -1);
+      renderTipoSelector();
+    } else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      state.tipoEscritoSearchTerm = String(state.tipoEscritoSearchTerm || "") + k;
+      renderTipoSelector();
+    } else {
+      return;
+    }
+    if (tipoSearchTimer) clearTimeout(tipoSearchTimer);
+    tipoSearchTimer = setTimeout(() => {
+      state.tipoEscritoSearchTerm = "";
+      renderTipoSelector();
+    }, 1500);
+  });
 }
 
 function cambiarTipoEscrito(nuevoId) {
@@ -4136,13 +4154,33 @@ function bindOtrosiesEvents() {
 
 // =============== PLANTILLAS (encabezado) ===============
 function bindPlantillaEvents() {
-  const search = document.getElementById("plantillaSelectorSearch");
-  if (search) {
-    search.addEventListener("input", () => {
+  const selPlantilla = document.getElementById("plantillaSelector");
+  let plantillaSearchTimer = null;
+  selPlantilla.addEventListener("keydown", e => {
+    const k = e.key || "";
+    if (k === "Escape") {
+      state.plantillaSearchTerm = "";
       renderPlantillaSelector();
-    });
-  }
-  document.getElementById("plantillaSelector").addEventListener("change", e => {
+      return;
+    }
+    if (k === "Backspace") {
+      e.preventDefault();
+      state.plantillaSearchTerm = String(state.plantillaSearchTerm || "").slice(0, -1);
+      renderPlantillaSelector();
+    } else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      state.plantillaSearchTerm = String(state.plantillaSearchTerm || "") + k;
+      renderPlantillaSelector();
+    } else {
+      return;
+    }
+    if (plantillaSearchTimer) clearTimeout(plantillaSearchTimer);
+    plantillaSearchTimer = setTimeout(() => {
+      state.plantillaSearchTerm = "";
+      renderPlantillaSelector();
+    }, 1500);
+  });
+  selPlantilla.addEventListener("change", e => {
     if ((state.modalidadComparecencia || "mero-tramite") !== "mero-tramite") {
       e.target.value = "";
       showStatus("Las plantillas de causa solo aplican en modalidad «Mero trámite».", "err");
